@@ -1,0 +1,8 @@
+<svg viewBox="0 0 140 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M45 115L50 168H88L93 115H45Z" fill="#F3DE9A" stroke="#1A1A1A" stroke-width="3" stroke-linejoin="round" />
+  <line x1="42" y1="115" x2="96" y2="115" stroke="#1A1A1A" stroke-width="3" stroke-linecap="round" />
+  <!-- Fern / rubber plant fronds -->
+  <path d="M68 115C80 80 115 65 125 35C130 15 110 10 95 30C82 48 70 85 68 115Z" fill="#1F5A45" stroke="#1A1A1A" stroke-width="3" />
+  <path d="M68 115C55 85 25 75 12 45C5 25 28 20 45 38C58 52 65 90 68 115Z" fill="#A9DCC3" stroke="#1A1A1A" stroke-width="3" />
+  <path d="M68 115C72 70 60 40 70 15C78 40 70 75 68 115Z" fill="#1F5A45" stroke="#1A1A1A" stroke-width="3" />
+</svg>

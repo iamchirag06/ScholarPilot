@@ -1,0 +1,35 @@
+<svg viewBox="0 0 200 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Pastel blob -->
+  <path d="M40 30C110 5 170 30 180 90C190 150 160 210 100 220C40 230 10 170 20 100C30 50 20 40 40 30Z" fill="#F3DE9A" />
+  
+  <!-- Student with mug -->
+  <g transform="translate(45, 30)">
+    <!-- Hair -->
+    <path d="M25 50C15 35 25 10 50 10C75 10 85 30 80 60C70 85 30 85 25 50Z" fill="#1A1A1A" />
+    <circle cx="55" cy="8" r="12" fill="#1A1A1A" />
+    <circle cx="55" cy="8" r="5" fill="#E8622C" />
+
+    <!-- Face -->
+    <path d="M35 40C35 28 45 22 55 22C65 22 75 28 75 40C75 55 65 65 55 65C45 65 35 55 35 40Z" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="2.5" />
+    <!-- Spectacles -->
+    <circle cx="47" cy="40" r="5" stroke="#1A1A1A" stroke-width="2" fill="none" />
+    <circle cx="63" cy="40" r="5" stroke="#1A1A1A" stroke-width="2" fill="none" />
+    <path d="M52 40H58" stroke="#1A1A1A" stroke-width="2" />
+    <!-- Smile -->
+    <path d="M51 52C53 54 57 54 59 52" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" />
+
+    <!-- Body -->
+    <path d="M25 78C35 72 75 72 85 78L95 140H15L25 78Z" fill="#1F5A45" stroke="#1A1A1A" stroke-width="3" />
+    
+    <!-- Hands holding mug -->
+    <g transform="translate(40, 90)">
+      <rect x="5" y="10" width="22" height="26" rx="4" fill="#FFFDF8" stroke="#1A1A1A" stroke-width="2.5" />
+      <path d="M27 15C32 15 32 25 27 25" stroke="#1A1A1A" stroke-width="2.5" fill="none" />
+      <path d="M0 16C5 12 12 18 10 26C8 30 0 26 0 16Z" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="2" />
+      <!-- Heart on mug -->
+      <path d="M16 22C16 19 13 18 12 20C11 18 8 19 8 22C8 25 12 28 12 28C12 28 16 25 16 22Z" fill="#E8622C" />
+      <!-- Steam -->
+      <path d="M12 4C14 1 12 -2 14 -5" stroke="#E8622C" stroke-width="1.8" stroke-linecap="round" />
+    </g>
+  </g>
+</svg>

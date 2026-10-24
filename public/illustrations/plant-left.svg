@@ -1,0 +1,10 @@
+<svg viewBox="0 0 140 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M40 120L45 170H85L90 120H40Z" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" stroke-linejoin="round" />
+  <line x1="38" y1="120" x2="92" y2="120" stroke="#1A1A1A" stroke-width="3" stroke-linecap="round" />
+  <!-- Monstera / Pothos Leaves -->
+  <path d="M65 120C60 85 30 75 20 50C12 30 35 25 50 45C60 60 65 95 65 120Z" fill="#1F5A45" stroke="#1A1A1A" stroke-width="3" />
+  <path d="M65 120C75 80 105 70 115 40C122 20 100 15 85 35C75 52 65 90 65 120Z" fill="#A9DCC3" stroke="#1A1A1A" stroke-width="3" />
+  <path d="M65 120C65 75 55 45 65 20C75 45 65 75 65 120Z" fill="#1F5A45" stroke="#1A1A1A" stroke-width="3" />
+  <path d="M35 85C42 80 50 82 58 90" stroke="#FFFDF8" stroke-width="2" stroke-linecap="round" opacity="0.6" />
+  <path d="M95 78C88 74 80 77 72 85" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" opacity="0.6" />
+</svg>

@@ -1,0 +1,14 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="55" r="38" fill="#F8E4E0" />
+  <g transform="translate(25, 25)">
+    <!-- Mug Body -->
+    <rect x="5" y="15" width="34" height="38" rx="5" fill="#FFFDF8" stroke="#1A1A1A" stroke-width="3" />
+    <!-- Mug Handle -->
+    <path d="M39 22C48 22 48 38 39 38" stroke="#1A1A1A" stroke-width="3" fill="none" />
+    <!-- Little Sun / Doodle on mug -->
+    <circle cx="22" cy="34" r="6" fill="#F3DE9A" stroke="#1A1A1A" stroke-width="1.8" />
+    <!-- Steam -->
+    <path d="M15 8C17 4 15 1 17 -3" stroke="#E8622C" stroke-width="2" stroke-linecap="round" />
+    <path d="M25 9C27 5 25 2 27 -2" stroke="#E8622C" stroke-width="2" stroke-linecap="round" />
+  </g>
+</svg>

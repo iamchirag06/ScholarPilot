@@ -1,0 +1,35 @@
+<svg viewBox="0 0 220 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Warm background blob -->
+  <path d="M20 50C40 10 160 5 190 40C220 80 200 150 150 165C90 180 30 160 10 120C-5 85 5 70 20 50Z" fill="#F9C6A5" opacity="0.8" />
+
+  <!-- Bottom shadow -->
+  <ellipse cx="110" cy="155" rx="85" ry="10" fill="#1A1A1A" opacity="0.1" />
+
+  <!-- Book 1 (bottom) -->
+  <g transform="translate(30, 115)">
+    <rect x="0" y="0" width="160" height="34" rx="4" fill="#F6B7C1" stroke="#1A1A1A" stroke-width="3" />
+    <path d="M15 0V34M145 0V34" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="2 2" />
+    <text x="80" y="22" font-family="'Caveat', cursive" font-size="19" font-weight="bold" fill="#1A1A1A" text-anchor="middle">Apply Together ✦</text>
+  </g>
+
+  <!-- Book 2 (middle, tilted slightly) -->
+  <g transform="translate(38, 70) rotate(-2)">
+    <rect x="0" y="0" width="145" height="34" rx="4" fill="#F3DE9A" stroke="#1A1A1A" stroke-width="3" />
+    <path d="M12 0V34M133 0V34" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="2 2" />
+    <text x="72" y="22" font-family="'Caveat', cursive" font-size="19" font-weight="bold" fill="#1A1A1A" text-anchor="middle">Dream Brighter ✦</text>
+  </g>
+
+  <!-- Book 3 (top, tilted slightly other way) -->
+  <g transform="translate(48, 25) rotate(3)">
+    <rect x="0" y="0" width="128" height="34" rx="4" fill="#A9DCC3" stroke="#1A1A1A" stroke-width="3" />
+    <path d="M10 0V34M118 0V34" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="2 2" />
+    <text x="64" y="22" font-family="'Caveat', cursive" font-size="19" font-weight="bold" fill="#1A1A1A" text-anchor="middle">Study Better ✦</text>
+  </g>
+
+  <!-- Tiny cup on top of books -->
+  <g transform="translate(130, -5) rotate(5)">
+    <rect x="0" y="6" width="16" height="18" rx="2" fill="#FFFDF8" stroke="#1A1A1A" stroke-width="2" />
+    <path d="M16 9C20 9 20 17 16 17" stroke="#1A1A1A" stroke-width="2" fill="none" />
+    <path d="M5 2C6 0 5 -2 6 -4" stroke="#E8622C" stroke-width="1.5" stroke-linecap="round" />
+  </g>
+</svg>
