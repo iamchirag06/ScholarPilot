@@ -49,7 +49,7 @@ func Run(ctx context.Context, rdb *redis.Client) {
 func process(ctx context.Context, rdb *redis.Client, job *queue.Job) {
 	log.Printf("[job] received %s with %d urls", job.JobID, len(job.URLs))
 
-	var allScholarships dto.ScholarshipList
+	allScholarships := make(dto.ScholarshipList, 0)
 	totalURLs := len(job.URLs)
 
 	if totalURLs == 0 {
@@ -65,16 +65,16 @@ Even if there is only ONE scholarship on the page, you MUST return a JSON array 
 Do not include any conversational text. Do not use markdown blocks. Return ONLY a valid JSON array matching this exact structure:
 [
   {
-    "source_portal": "string",
-    "scheme_name": "string",
+    "sourcePortal": "string",
+    "schemeName": "string",
     "provider": "string",
-    "award_amount": 0,
+    "awardAmount": 0,
     "deadline": "YYYY-MM-DD",
-    "apply_link": "string",
-    "raw_eligibility_text": "string",
-    "llm_summary": "string",
-    "required_documents": ["string"],
-    "confidence_score": 0.0
+    "applyLink": "string",
+    "rawEligibilityText": "string",
+    "llmSummary": "string",
+    "requiredDocuments": ["string"],
+    "confidenceScore": 0.0
   }
 ]`
 	}
@@ -112,7 +112,7 @@ Do not include any conversational text. Do not use markdown blocks. Return ONLY 
 					scholarshipList = append(scholarshipList, single)
 				} else {
 					if errArray := json.Unmarshal(res.Data, &scholarshipList); errArray != nil {
-						log.Printf("[job] %s schema error on %s: %v", job.JobID, targetURL, errArray)
+						log.Printf("[job] %s schema error on %s: %v\nRAW DATA: %s", job.JobID, targetURL, errArray, string(res.Data))
 						break
 					}
 				}
@@ -149,12 +149,18 @@ Do not include any conversational text. Do not use markdown blocks. Return ONLY 
 	}
 
 	cleanData, _ := json.Marshal(allScholarships)
-	_ = queue.SetResult(ctx, rdb, job.JobID, cleanData)
-	_ = queue.SetStatus(ctx, rdb, job.JobID, queue.Status{
+
+	if err := queue.SetResult(ctx, rdb, job.JobID, cleanData); err != nil {
+		log.Printf("[CRITICAL ERROR] Failed to save result to Redis: %v", err)
+	}
+
+	if err := queue.SetStatus(ctx, rdb, job.JobID, queue.Status{
 		State:    "completed",
 		Progress: 100,
 		Attempts: 1,
-	})
+	}); err != nil {
+		log.Printf("[CRITICAL ERROR] Failed to save status to Redis: %v", err)
+	}
 	log.Printf("[job] completed %s - Extracted %d total scholarships across %d URLs", job.JobID, len(allScholarships), totalURLs)
 
 	go func() {
@@ -169,7 +175,17 @@ Do not include any conversational text. Do not use markdown blocks. Return ONLY 
 
 		bodyBytes, _ := json.Marshal(payload)
 
-		resp, err := http.Post(javaURL, "application/json", bytes.NewBuffer(bodyBytes))
+		req, err := http.NewRequest("POST", javaURL, bytes.NewBuffer(bodyBytes))
+		if err != nil {
+			log.Printf("[callback] failed to create request: %v", err)
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("ngrok-skip-browser-warning", "true")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
 		if err != nil {
 			log.Printf("[callback] failed to notify Java: %v", err)
 			return

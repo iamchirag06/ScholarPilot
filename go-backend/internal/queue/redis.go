@@ -76,7 +76,7 @@ func GetStatus(ctx context.Context, rdb *redis.Client, jobID string) (*Status, e
 }
 
 func SetResult(ctx context.Context, rdb *redis.Client, jobID string, data json.RawMessage) error {
-	return rdb.Set(ctx, JobResultKey+jobID, data, JobStatusTTL).Err()
+	return rdb.Set(ctx, JobResultKey+jobID, string(data), JobStatusTTL).Err()
 }
 
 func GetResult(ctx context.Context, rdb *redis.Client, jobID string) (json.RawMessage, error) {

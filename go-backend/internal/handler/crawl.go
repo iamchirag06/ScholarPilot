@@ -93,8 +93,12 @@ func (h *CrawlHandler) GetCrawlStatus(w http.ResponseWriter, r *http.Request) {
 		resp["error"] = st.Error
 	}
 	if st.State == "completed" {
-		data, _ := queue.GetResult(ctx, h.rdb, jobID)
-		resp["data"] = json.RawMessage(data)
+		data, err := queue.GetResult(ctx, h.rdb, jobID)
+		if err == nil && len(data) > 0 && string(data) != "null" {
+			resp["data"] = json.RawMessage(data)
+		} else {
+			resp["data"] = []any{}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
