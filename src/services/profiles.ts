@@ -28,6 +28,7 @@ export function normalizeProfile(raw: any): Profile {
   if (!raw) return DEMO_PROFILE;
   return {
     id: raw.id ?? raw.profileId ?? raw._id,
+    userId: raw.userId ?? raw.user_id ?? raw.user?.id,
     fullName: raw.fullName ?? raw.full_name ?? '',
     category: raw.category ?? 'GENERAL',
     annualIncome: typeof raw.annualIncome === 'number' ? raw.annualIncome : Number(raw.annual_income ?? 0),
@@ -37,6 +38,81 @@ export function normalizeProfile(raw: any): Profile {
     isDisabled: Boolean(raw.isDisabled ?? raw.is_disabled ?? false),
     marksPercentage: typeof raw.marksPercentage === 'number' ? raw.marksPercentage : Number(raw.marks_percentage ?? 0),
   };
+}
+
+/**
+ * Fetches the user's existing profile from DB by their userId.
+ * Tries:
+ * 1. Dedicated user profile route: GET /api/profiles/user/{userId}
+ * 2. Fallback to GET /api/profiles/all and finding profile with matching userId or user_id
+ * 3. Fallback to GET /api/profiles/{userId} (if backend accepts userId directly)
+ */
+export async function getProfileByUserId(userId: string): Promise<Profile | null> {
+  if (!userId) return null;
+
+  if (isMockMode()) {
+    const list = getMockProfiles();
+    const found = list.find(
+      (p: any) =>
+        String(p.userId || p.user_id) === String(userId) ||
+        String(p.id) === String(userId)
+    );
+    return found ? normalizeProfile(found) : null;
+  }
+
+  // 1. Try dedicated route GET /api/profiles/user/{userId}
+  try {
+    const direct = await apiFetch<any>(`/api/profiles/user/${userId}`);
+    if (direct && (direct.id || direct.fullName || direct.full_name)) {
+      const normalized = normalizeProfile(direct);
+      if (typeof window !== 'undefined' && normalized.id) {
+        localStorage.setItem('scholarpilot_profile_id', String(normalized.id));
+      }
+      return normalized;
+    }
+  } catch {}
+
+  // 2. Query all profiles from DB and match by userId
+  try {
+    const all = await apiFetch<any>('/api/profiles/all');
+    let listData: any[] = [];
+    if (Array.isArray(all)) {
+      listData = all;
+    } else if (all && typeof all === 'object' && Array.isArray(all.profiles)) {
+      listData = all.profiles;
+    } else if (all && typeof all === 'object' && Array.isArray(all.data)) {
+      listData = all.data;
+    }
+
+    const matched = listData.find(
+      (p: any) =>
+        String(p.userId ?? p.user_id ?? p.user?.id ?? '') === String(userId)
+    );
+
+    if (matched) {
+      const normalized = normalizeProfile(matched);
+      if (typeof window !== 'undefined' && normalized.id) {
+        localStorage.setItem('scholarpilot_profile_id', String(normalized.id));
+      }
+      return normalized;
+    }
+  } catch (err) {
+    console.warn('Could not query all profiles by userId:', err);
+  }
+
+  // 3. Fallback: try GET /api/profiles/{userId}
+  try {
+    const byId = await apiFetch<any>(`/api/profiles/${userId}`);
+    if (byId && (byId.id || byId.fullName || byId.full_name)) {
+      const normalized = normalizeProfile(byId);
+      if (typeof window !== 'undefined' && normalized.id) {
+        localStorage.setItem('scholarpilot_profile_id', String(normalized.id));
+      }
+      return normalized;
+    }
+  } catch {}
+
+  return null;
 }
 
 /**
@@ -54,7 +130,7 @@ export async function createProfile(
     throw new ApiError(400, 'User ID is required. Please sign in or create an account first.');
   }
 
-  const payload: Record<string, any> = {
+  const payload: Omit<Profile, 'id'> & { userId: string } = {
     userId: userId || 'mock-user-id',
     fullName: data.fullName?.trim() || '',
     category: data.category,
@@ -102,6 +178,26 @@ export async function createProfile(
     }
     return saved;
   } catch (err: any) {
+    const errMsg = String(err.message || '').toLowerCase();
+    if (
+      errMsg.includes('already exists') ||
+      errMsg.includes('duplicate key') ||
+      errMsg.includes('unique constraint') ||
+      errMsg.includes('user_id')
+    ) {
+      console.warn('Profile already exists for user_id, fetching existing profile to update instead...');
+      try {
+        const existing = await getProfileByUserId(payload.userId);
+        if (existing && existing.id) {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('scholarpilot_profile_id', String(existing.id));
+          }
+          return await updateProfile(existing.id, payload, existing);
+        }
+      } catch (updateErr) {
+        console.warn('Failed to auto-update existing profile on duplicate error:', updateErr);
+      }
+    }
     if (err instanceof ApiError) {
       throw err;
     }

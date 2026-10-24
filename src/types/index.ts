@@ -8,10 +8,13 @@ export interface User {
   email: string;
   fullName: string;
   token?: string;
+  userId?: string;
+  name?: string;
 }
 
 export interface Profile {
   id?: number | string; // returned by backend after create
+  userId?: string;
   fullName: string;
   category: Category;
   annualIncome: number;
@@ -46,7 +49,7 @@ export interface Application {
 }
 
 export interface CrawlProgressEvent {
-  status: 'crawling' | 'summarizing' | 'done' | 'error';
+  status: 'crawling' | 'summarizing' | 'done' | 'completed' | 'started' | 'in_progress' | 'error';
   progress: number; // 0 - 100
   message?: string;
   schemes_found?: number;
@@ -55,4 +58,5 @@ export interface CrawlProgressEvent {
 
 export interface CrawlStartResponse {
   job_id: string;
+  status?: string;
 }

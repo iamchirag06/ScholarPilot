@@ -63,18 +63,25 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setProfile((prev) => ({
-      ...initialProfile,
-      fullName: prev.fullName || resolveFullName(initialProfile),
-      annualIncome: initialProfile.annualIncome ?? prev.annualIncome ?? 0,
-      marksPercentage: initialProfile.marksPercentage ?? prev.marksPercentage ?? 75,
-      isDisabled: Boolean(initialProfile.isDisabled ?? prev.isDisabled),
-      state: initialProfile.state || prev.state || 'Haryana',
-      courseLevel: initialProfile.courseLevel || prev.courseLevel || 'UG',
-      category: initialProfile.category || prev.category || 'GENERAL',
-      gender: initialProfile.gender || prev.gender || 'MALE',
-    }));
-  }, [initialProfile, username]);
+    if (initialProfile && initialProfile.id) {
+      setProfile({
+        ...initialProfile,
+        fullName: initialProfile.fullName || resolveFullName(initialProfile),
+        annualIncome: initialProfile.annualIncome ?? 0,
+        marksPercentage: initialProfile.marksPercentage ?? 75,
+        isDisabled: Boolean(initialProfile.isDisabled),
+        state: initialProfile.state || 'Haryana',
+        courseLevel: initialProfile.courseLevel || 'UG',
+        category: initialProfile.category || 'GENERAL',
+        gender: initialProfile.gender || 'MALE',
+      });
+    } else if (username) {
+      setProfile((prev) => ({
+        ...prev,
+        fullName: prev.fullName || formatDisplayName(username),
+      }));
+    }
+  }, [initialProfile?.id, username]);
 
   const userGreetingName = useMemo(() => {
     const raw = profile.fullName || username || getStoredUsername();

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Scheme, Profile } from '../types/index.ts';
 import { StickyNote } from '../components/decorative/StickyNote.tsx';
 import { Button } from '../components/ui/Button.tsx';
-import { formatINR } from '../mockData.ts';
+import { formatINR, MOCK_SCHEMES } from '../mockData.ts';
 import { getAutoFillData } from '../services/schemes.ts';
 import {
   Sparkles,
@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 
 interface AutoFillPageProps {
-  scheme: Scheme;
+  scheme?: Scheme;
   profile: Profile;
-  availableSchemes: Scheme[];
+  availableSchemes?: Scheme[];
   onSelectScheme: (scheme: Scheme) => void;
   onSubmitApplication: (schemeId: string) => void;
 }
@@ -32,12 +32,13 @@ interface FormFieldState {
 }
 
 export const AutoFillPage: React.FC<AutoFillPageProps> = ({
-  scheme,
+  scheme: propScheme,
   profile,
-  availableSchemes,
+  availableSchemes = [],
   onSelectScheme,
   onSubmitApplication,
 }) => {
+  const scheme = propScheme || availableSchemes[0] || MOCK_SCHEMES[0];
   const [fields, setFields] = useState<FormFieldState[]>([]);
   const [docStatuses, setDocStatuses] = useState<Record<string, boolean>>({});
   const [isAnimating, setIsAnimating] = useState(false);
@@ -284,14 +285,14 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
         <div className="flex items-center gap-2">
           <label className="text-xs text-[#5E5A52] font-semibold">Switch Scheme:</label>
           <select
-            value={scheme.id}
+            value={scheme?.id || ''}
             onChange={(e) => {
-              const found = availableSchemes.find((s) => s.id === e.target.value);
+              const found = (availableSchemes || []).find((s) => s.id === e.target.value);
               if (found) onSelectScheme(found);
             }}
             className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#1F5A45]"
           >
-            {availableSchemes.map((s) => (
+            {(availableSchemes || []).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.scheme_name} ({s.source_portal})
               </option>

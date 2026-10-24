@@ -33,33 +33,35 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({
 
   // Portal blob styling
   const getPortalBadge = () => {
-    switch (scheme.source_portal) {
-      case 'NSP':
-        return {
-          bg: '#F3DE9A',
-          icon: <Landmark className="w-5 h-5 text-[#1A1A1A]" />,
-        };
-      case 'Haryana State':
-        return {
-          bg: '#A9DCC3',
-          icon: <GraduationCap className="w-5 h-5 text-[#1A1A1A]" />,
-        };
-      case 'Delhi State':
-        return {
-          bg: '#F9C6A5',
-          icon: <Building2 className="w-5 h-5 text-[#1A1A1A]" />,
-        };
-      case 'Private Trust':
-      default:
-        return {
-          bg: '#F6B7C1',
-          icon: <Sparkles className="w-5 h-5 text-[#1A1A1A]" />,
-        };
+    const portal = (scheme.source_portal || '').toUpperCase();
+    if (portal.includes('NSP') || portal.includes('NATIONAL') || portal.includes('CENTRAL')) {
+      return {
+        bg: '#F3DE9A',
+        icon: <Landmark className="w-5 h-5 text-[#1A1A1A]" />,
+      };
     }
+    if (portal.includes('HARYANA')) {
+      return {
+        bg: '#A9DCC3',
+        icon: <GraduationCap className="w-5 h-5 text-[#1A1A1A]" />,
+      };
+    }
+    if (portal.includes('DELHI') || portal.includes('DISTRICT')) {
+      return {
+        bg: '#F9C6A5',
+        icon: <Building2 className="w-5 h-5 text-[#1A1A1A]" />,
+      };
+    }
+    return {
+      bg: '#F6B7C1',
+      icon: <Sparkles className="w-5 h-5 text-[#1A1A1A]" />,
+    };
   };
 
   const portalBadge = getPortalBadge();
-  const confidencePercent = Math.round((scheme.confidence_score ?? ((scheme.rank_score ?? 95) / 100)) * 100);
+  let rawConfidence = scheme.confidence_score ?? ((scheme.rank_score ?? 95) / 100);
+  if (rawConfidence > 1) rawConfidence = rawConfidence / 100;
+  const confidencePercent = Math.min(100, Math.max(0, Math.round(rawConfidence * 100)));
 
   return (
     <article className="paper-card paper-card-interactive p-6 flex flex-col justify-between relative overflow-hidden group">
@@ -177,7 +179,7 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({
               <span className="font-script text-sm text-[#E8622C] block font-bold mb-1">
                 Raw Government Portal Text:
               </span>
-              <p className="italic">"{scheme.raw_eligibility_text}"</p>
+              <p className="italic">"{scheme.raw_eligibility_text || scheme.llm_summary || 'Eligibility details verified by official portal circular.'}"</p>
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Application, Scheme, ApplicationStatus } from '../types/index.ts';
-import { formatINR, getDeadlineUrgency } from '../mockData.ts';
+import { formatINR, getDeadlineUrgency, MOCK_SCHEMES } from '../mockData.ts';
 import { HandUnderline } from '../components/decorative/HandUnderline.tsx';
 import { Scribble } from '../components/decorative/Scribble.tsx';
 import { Button } from '../components/ui/Button.tsx';
@@ -49,7 +49,8 @@ export const TrackerPage: React.FC<TrackerPageProps> = ({
   // Map scheme ID to scheme object
   const schemeMap = useMemo(() => {
     const map = new Map<string, Scheme>();
-    schemes.forEach((s) => map.set(s.id, s));
+    MOCK_SCHEMES.forEach((s) => map.set(s.id, s));
+    (schemes || []).forEach((s) => map.set(s.id, s));
     return map;
   }, [schemes]);
 
@@ -63,7 +64,7 @@ export const TrackerPage: React.FC<TrackerPageProps> = ({
       REJECTED: [],
     };
 
-    applications.forEach((app) => {
+    (applications || []).forEach((app) => {
       if (groups[app.status]) {
         groups[app.status].push(app);
       }

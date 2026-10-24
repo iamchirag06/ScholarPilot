@@ -12,9 +12,7 @@ import {
   Sparkles,
   Database,
   FileCheck,
-  Clock,
-  FastForward,
-  Terminal,
+  Activity,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -32,7 +30,7 @@ interface ActivityLogItem {
   progress: number;
 }
 
-const TOTAL_CRAWL_SECONDS = 120; // Exact 2 minutes
+const TOTAL_CRAWL_SECONDS = 120; // 2-minute safety ceiling
 
 export const ProgressPage: React.FC<ProgressPageProps> = ({
   jobId,
@@ -47,20 +45,18 @@ export const ProgressPage: React.FC<ProgressPageProps> = ({
   const [currentPortal, setCurrentPortal] = useState<string>('Initializing');
   const [errorState, setErrorState] = useState<string | null>(null);
 
-  // Speed multiplier for testing convenience (default 1 = full 2 minutes)
-  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
   const [secondsElapsed, setSecondsElapsed] = useState<number>(0);
   const [activityLogs, setActivityLogs] = useState<ActivityLogItem[]>([
     {
       id: 'init',
-      time: '00:01',
+      time: 'Just now',
       portal: 'Cluster Node',
-      message: 'Worker initialized · starting 2-minute comprehensive scholarship crawl',
+      message: 'TinyFish crawler initialized · starting multi-portal scholarship discovery',
       progress: 3,
     },
   ]);
 
-  // Stepper stages mapped across the 2-minute cycle
+  // Stepper stages mapped across the discovery cycle
   const stages = [
     { id: 1, name: 'Crawling Portals', threshold: 30, icon: <Database className="w-4 h-4" /> },
     { id: 2, name: 'Processing Data', threshold: 65, icon: <FileCheck className="w-4 h-4" /> },
@@ -77,35 +73,49 @@ export const ProgressPage: React.FC<ProgressPageProps> = ({
 
   const activeStageIndex = getActiveStageIndex();
 
-  // Seconds countdown & elapsed timer
+  const startTimeRef = useRef<number>(Date.now());
+
+  // Portal pill styling matching the ScholarPilot warm pastel design system
+  const getPortalStyle = (portal: string) => {
+    const p = (portal || '').toUpperCase();
+    if (p.includes('NSP') || p.includes('CENTRAL')) {
+      return { bg: '#F3DE9A', text: '#1A1A1A', border: '#E5CD7E' }; // Butter yellow
+    }
+    if (p.includes('HARYANA') || p.includes('HAR-')) {
+      return { bg: '#A9DCC3', text: '#17261F', border: '#8ECDAE' }; // Mint
+    }
+    if (p.includes('DELHI') || p.includes('DISTRICT')) {
+      return { bg: '#F9C6A5', text: '#1A1A1A', border: '#F4B086' }; // Peach
+    }
+    if (p.includes('AICTE') || p.includes('PRAGATI')) {
+      return { bg: '#F6B7C1', text: '#1A1A1A', border: '#EFA0AD' }; // Rose pink
+    }
+    if (p.includes('RELIANCE') || p.includes('CSR') || p.includes('TATA')) {
+      return { bg: '#E0D4FD', text: '#1A1A1A', border: '#CBB8F8' }; // Lavender
+    }
+    return { bg: '#EDF8F3', text: '#1F5A45', border: '#A9DCC3' }; // Sage forest
+  };
+
+  // Seconds countdown & elapsed safety timer
   useEffect(() => {
     const timerInterval = setInterval(() => {
       setSecondsElapsed((prev) => {
         const next = prev + 1;
-        if (next >= TOTAL_CRAWL_SECONDS && progress < 100) {
-          setProgress(100);
+        if (next >= TOTAL_CRAWL_SECONDS) {
+          setProgress((p) => (p < 100 ? 100 : p));
         }
         return next;
       });
-    }, Math.round(1000 / speedMultiplier));
+    }, 1000);
 
     return () => clearInterval(timerInterval);
-  }, [speedMultiplier, progress]);
-
-  // Format time display (MM:SS)
-  const formatTime = (totalSec: number) => {
-    const safeSec = Math.max(0, Math.floor(totalSec));
-    const mins = Math.floor(safeSec / 60);
-    const secs = safeSec % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const remainingSeconds = Math.max(0, TOTAL_CRAWL_SECONDS - secondsElapsed);
+  }, []);
 
   // Subscribe to multi-step crawler timeline
   useEffect(() => {
     setErrorState(null);
     setSecondsElapsed(0);
+    startTimeRef.current = Date.now();
 
     const unsubscribe = subscribeCrawlStatus(
       jobId,
@@ -113,16 +123,22 @@ export const ProgressPage: React.FC<ProgressPageProps> = ({
         setProgress(evt.progress);
         if (evt.message) {
           setStatusMessage(evt.message);
-          // Add to rolling live log
+          const now = new Date();
+          const timestamp = now.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+          // Add to rolling live themed activity log
           setActivityLogs((prev) => [
             {
               id: `${Date.now()}-${Math.random()}`,
-              time: formatTime(secondsElapsed),
+              time: timestamp,
               portal: evt.current_portal || 'Crawler',
               message: evt.message || '',
               progress: evt.progress,
             },
-            ...prev.slice(0, 5), // Keep latest 6 logs
+            ...prev.slice(0, 7), // Keep latest 8 logs
           ]);
         }
         if (evt.schemes_found !== undefined) setSchemesFound(evt.schemes_found);
@@ -137,13 +153,13 @@ export const ProgressPage: React.FC<ProgressPageProps> = ({
           onComplete();
         }, 700);
       },
-      speedMultiplier
+      1
     );
 
     return () => {
       unsubscribe();
     };
-  }, [jobId, speedMultiplier]);
+  }, [jobId]);
 
   return (
     <div className="py-10 sm:py-16 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto">
@@ -154,12 +170,13 @@ export const ProgressPage: React.FC<ProgressPageProps> = ({
           <CatIllustration className="w-32 sm:w-40 h-auto" />
         </div>
 
-        {/* 2-Minute Simulation Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FEF8EA] border border-[#E8622C]/30 text-xs font-bold text-[#E8622C] mb-3">
-          <Clock className="w-3.5 h-3.5 animate-spin" />
-          <span>2-Minute Deep Crawl Simulation</span>
-          <span className="text-[#5E5A52]">·</span>
-          <span className="font-mono text-[#1F5A45]">{formatTime(remainingSeconds)} remaining</span>
+        {/* Live Scan Status Badge */}
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FEF8EA] border border-[#E9E1D3] text-xs font-bold text-[#1F5A45] mb-3 shadow-2xs">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2F8F6B] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2F8F6B]"></span>
+          </span>
+          <span>Live Multi-Portal Scholarship Scan</span>
         </div>
 
         {/* Eyebrow & Headline */}
@@ -204,9 +221,12 @@ export const ProgressPage: React.FC<ProgressPageProps> = ({
 
         {/* Hand-drawn thick progress bar with orange-to-green gradient texture */}
         <div className="relative mb-6">
-          <div className="flex justify-between text-xs font-bold text-[#5E5A52] mb-1.5 px-1 font-mono">
-            <span>Elapsed: {formatTime(secondsElapsed)}</span>
-            <span>Target: 02:00</span>
+          <div className="flex justify-between items-center text-xs font-semibold text-[#5E5A52] mb-1.5 px-1">
+            <span className="flex items-center gap-1.5 text-[#1F5A45] font-bold">
+              <span className="w-2 h-2 rounded-full bg-[#2F8F6B] animate-pulse" />
+              Autonomous Deep Discovery
+            </span>
+            <span className="font-bold text-[#E8622C] font-mono">{progress}% Complete</span>
           </div>
 
           <div className="w-full bg-[#E9E1D3] rounded-full h-5 sm:h-6 p-1 border-2 border-[#1A1A1A]/10 overflow-hidden shadow-inner">
@@ -248,24 +268,100 @@ export const ProgressPage: React.FC<ProgressPageProps> = ({
           </div>
         </div>
 
-        {/* Live Terminal / Crawl Activity Log */}
-        <div className="bg-[#1A1A1A] rounded-xl p-3.5 text-left text-white font-mono text-xs mb-6 border border-[#333] shadow-inner overflow-hidden">
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#333] text-[11px] text-[#A9DCC3]">
-            <div className="flex items-center gap-2">
-              <Terminal className="w-3.5 h-3.5 text-[#2F8F6B]" />
-              <span className="font-bold tracking-wider uppercase">Crawler Activity Log</span>
-            </div>
-            <span className="text-[#888]">{speedMultiplier > 1 ? `${speedMultiplier}x Speed` : '2-Min Pace'}</span>
+        {/* Live Themed Crawler Activity Log - Dispatch Ledger */}
+        <div className="relative bg-[#FFFDF8] rounded-2xl p-4 sm:p-5 text-left mb-6 border-2 border-[#E9E1D3] shadow-xs overflow-hidden">
+          {/* Decorative washi tape badge in top corner */}
+          <div className="absolute -top-2.5 left-7 px-3 py-0.5 bg-[#F3DE9A] border border-[#E5CD7E] rounded-xs text-[10px] font-bold text-[#1A1A1A] tracking-wider uppercase shadow-2xs rotate-[-1deg] select-none">
+            Live Stream
           </div>
 
-          <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-            {activityLogs.map((log) => (
-              <div key={log.id} className="flex items-start gap-2 text-[11px] leading-relaxed">
-                <span className="text-[#E8622C] shrink-0">[{log.time}]</span>
-                <span className="text-[#F3DE9A] shrink-0 font-bold">[{log.portal}]:</span>
-                <span className="text-[#E0E0E0] truncate">{log.message}</span>
+          {/* Log Header */}
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#E9E1D3]/80">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-[#EDF8F3] border border-[#A9DCC3] flex items-center justify-center text-[#1F5A45] shadow-2xs">
+                <Activity className="w-4 h-4 animate-pulse" />
               </div>
-            ))}
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-serif font-bold text-sm text-[#1A1A1A] tracking-tight">
+                    Crawler Activity Log
+                  </h3>
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FEF8EA] text-[#E8622C] border border-[#E8622C]/20 font-mono">
+                    TinyFish Spider
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#5E5A52]">
+                  Real-time portal parser & criteria discovery stream
+                </p>
+              </div>
+            </div>
+
+            {/* Live radar badge */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#EDF8F3] border border-[#A9DCC3]/70 text-[11px] font-bold text-[#1F5A45] shadow-2xs">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2F8F6B] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2F8F6B]"></span>
+              </span>
+              <span>Live Feed</span>
+            </div>
+          </div>
+
+          {/* Activity Log Stream */}
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1 select-text">
+            {activityLogs.map((log, idx) => {
+              const portalStyle = getPortalStyle(log.portal);
+              const isLatest = idx === 0;
+
+              return (
+                <div
+                  key={log.id}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl border transition-all duration-300 ${
+                    isLatest
+                      ? 'bg-[#FEF8EA]/90 border-[#E8622C]/35 shadow-xs ring-1 ring-[#E8622C]/15'
+                      : 'bg-[#FBF6EE]/70 hover:bg-[#FBF6EE] border-[#E9E1D3]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Timestamp */}
+                    <span className="text-[10px] font-mono font-medium text-[#5E5A52] shrink-0 bg-white px-2 py-0.5 rounded border border-[#E9E1D3] shadow-2xs">
+                      {log.time}
+                    </span>
+
+                    {/* Portal Badge with Pastel Site Colors */}
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 shadow-2xs"
+                      style={{
+                        backgroundColor: portalStyle.bg,
+                        color: portalStyle.text,
+                        borderColor: portalStyle.border,
+                      }}
+                    >
+                      {log.portal}
+                    </span>
+
+                    {/* Log Message */}
+                    <span className="text-xs text-[#1A1A1A] font-medium truncate">
+                      {log.message}
+                    </span>
+                  </div>
+
+                  {/* Right Status Badge */}
+                  <div className="shrink-0 flex items-center gap-1.5 self-end sm:self-center">
+                    {isLatest ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#E8622C] bg-white px-2 py-0.5 rounded-full border border-[#E8622C]/30 shadow-2xs">
+                        <Sparkles className="w-3 h-3 text-[#E8622C] animate-spin" />
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-[#2F8F6B] font-bold flex items-center gap-0.5">
+                        <Check className="w-3 h-3 text-[#2F8F6B]" />
+                        OK
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -291,41 +387,15 @@ export const ProgressPage: React.FC<ProgressPageProps> = ({
           </div>
         )}
 
-        {/* Action Controls: Skip button and Speed multiplier */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-[#E9E1D3]">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[#5E5A52] font-semibold">Crawl Pace:</span>
-            <button
-              type="button"
-              onClick={() => setSpeedMultiplier(1)}
-              className={`text-xs px-2.5 py-1 rounded-md font-semibold transition-all ${
-                speedMultiplier === 1
-                  ? 'bg-[#1F5A45] text-white shadow-xs'
-                  : 'bg-[#FBF6EE] text-[#5E5A52] hover:text-[#1A1A1A] border border-[#E9E1D3]'
-              }`}
-            >
-              1x (2 Min)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSpeedMultiplier(10)}
-              className={`text-xs px-2.5 py-1 rounded-md font-semibold flex items-center gap-1 transition-all ${
-                speedMultiplier === 10
-                  ? 'bg-[#E8622C] text-white shadow-xs'
-                  : 'bg-[#FBF6EE] text-[#5E5A52] hover:text-[#1A1A1A] border border-[#E9E1D3]'
-              }`}
-            >
-              <FastForward className="w-3 h-3" />
-              10x Fast
-            </button>
-          </div>
-
+        {/* Skip waiting action */}
+        <div className="flex items-center justify-center pt-3 border-t border-[#E9E1D3]">
           <button
             type="button"
             onClick={onComplete}
-            className="text-xs font-bold text-[#E8622C] hover:text-[#D55320] underline cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#E8622C] hover:text-[#D55320] hover:underline cursor-pointer transition-colors"
           >
-            Skip waiting & go straight to matched results →
+            <span>Skip waiting & go straight to matched results</span>
+            <span className="text-sm">→</span>
           </button>
         </div>
 

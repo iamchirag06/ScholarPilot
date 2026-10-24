@@ -114,9 +114,18 @@ export async function getUserApplications(userId?: string): Promise<Application[
   }
 
   try {
-    const rawList = await apiFetch<any[]>(`/api/applications/user/${effectiveUserId}`);
-    if (!Array.isArray(rawList)) return getStoredApplications();
-    const list = rawList.map(normalizeApplication);
+    const rawList = await apiFetch<any>(`/api/applications/user/${effectiveUserId}`);
+    let listData: any[] = [];
+    if (Array.isArray(rawList)) {
+      listData = rawList;
+    } else if (rawList && typeof rawList === 'object' && Array.isArray(rawList.applications)) {
+      listData = rawList.applications;
+    } else if (rawList && typeof rawList === 'object' && Array.isArray(rawList.data)) {
+      listData = rawList.data;
+    } else {
+      return getStoredApplications();
+    }
+    const list = listData.map(normalizeApplication);
     saveStoredApplications(list);
     return list;
   } catch (err) {

@@ -21,6 +21,7 @@ import {
 import { DEMO_PROFILE, MOCK_SCHEMES, INITIAL_APPLICATIONS, formatDisplayName, getStoredUsername } from './mockData.ts';
 import {
   getProfile,
+  getProfileByUserId,
   createProfile,
   updateProfile,
   getMatchedSchemes,
@@ -225,6 +226,29 @@ export default function App() {
       setProfileId(effectiveId);
     }
 
+    const uid = getStoredUserId() || currentUser?.id || currentUser?.userId;
+
+    // If user is authenticated but profileId is missing, automatically fetch user's profile from DB
+    if (uid && !effectiveId) {
+      getProfileByUserId(uid)
+        .then((existing) => {
+          if (existing && existing.id) {
+            setProfile(existing);
+            setProfileId(existing.id);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('scholarpilot_profile_id', String(existing.id));
+              if (existing.fullName) {
+                localStorage.setItem('scholarpilot_username', existing.fullName);
+              }
+            }
+            if (tab === 'dashboard' || id) {
+              loadDashboardData(existing.id);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
     // Route Guard: Before setting up profile, use authpage for signup and login
     if (tab === 'profile' && !currentUser && !effectiveId) {
       addToast('info', 'Sign In or Sign Up', 'Please create an account or sign in before setting up your profile.');
@@ -253,9 +277,8 @@ export default function App() {
     }
 
     // Route 11: GET /api/applications/user/{userId}
-    const userId = getStoredUserId() || currentUser?.id;
-    if (userId) {
-      getUserApplications(userId)
+    if (uid) {
+      getUserApplications(uid)
         .then((apps) => {
           setApplications(apps);
           setSavedSchemeIds(new Set(apps.map((a) => a.scheme_id)));
@@ -298,8 +321,13 @@ export default function App() {
         }
         addToast('success', 'Profile Created! ✦', `Welcome, ${created.fullName}! TinyFish is crawling portals for you.`);
 
-        // Launch 2-minute crawling simulation, which seamlessly auto-transitions to dashboard when complete
-        setActiveJobId(`job-${Date.now()}`);
+        // Step 13: Call POST /api/crawl/start with urls: ["NSP", "Haryana", "AICTE", "Delhi"]
+        let jId = `job-${Date.now()}`;
+        try {
+          const res = await startCrawl(['NSP', 'Haryana', 'AICTE', 'Delhi']);
+          jId = res.job_id || jId;
+        } catch {}
+        setActiveJobId(jId);
         setIsCrawling(true);
       }
     } catch (err: any) {
@@ -325,12 +353,13 @@ export default function App() {
     addToast('info', 'Signed Out', 'You have been signed out. Please sign in or register to set up your profile.');
   };
 
-  // Handler: Start Crawl from Dashboard
+  // Handler: Start Crawl from Dashboard (Route 13: POST /api/crawl/start)
   const handleStartCrawl = async () => {
     setIsLoadingData(true);
     try {
-      const { job_id } = await startCrawl();
-      setActiveJobId(job_id);
+      const res = await startCrawl(['NSP', 'Haryana', 'AICTE', 'Delhi']);
+      const jId = res.job_id || `job-${Date.now()}`;
+      setActiveJobId(jId);
       setIsCrawling(true);
     } catch {
       setActiveJobId(`job-${Date.now()}`);
@@ -340,9 +369,21 @@ export default function App() {
     }
   };
 
-  // Handler: Crawler Completed -> Transition to Dashboard
+  // Handler: Crawler Completed -> Fetch /api/schemes/matched/{userId} to show the final results
   const handleCrawlComplete = async () => {
     setIsCrawling(false);
+    const uid = getStoredUserId() || currentUser?.id || profileId;
+    if (uid) {
+      try {
+        const matched = await getMatchedSchemes(uid);
+        setSchemes(matched);
+        if (matched.length > 0) {
+          setSelectedSchemeForAutoFill(matched[0]);
+        }
+      } catch (err) {
+        console.warn('Failed to load matched schemes after crawl:', err);
+      }
+    }
     if (profileId) {
       navigate(`/dashboard/${profileId}`, 'dashboard', profileId);
       loadDashboardData(profileId);
@@ -518,15 +559,12 @@ export default function App() {
 
               {activeTab === 'auth' && (
                 <AuthPage
-                  onSuccess={(user) => {
+                  onSuccess={async (user) => {
                     setCurrentUser(user);
                     const formatted = formatDisplayName(user.fullName);
-                    setProfile((prev) => ({
-                      ...prev,
-                      fullName: formatted,
-                    }));
-                    // Preload user's tracker applications
                     const uid = user.id || user.userId || getStoredUserId();
+
+                    // Preload user's tracker applications
                     if (uid) {
                       getUserApplications(uid)
                         .then((apps) => {
@@ -535,6 +573,40 @@ export default function App() {
                         })
                         .catch(() => {});
                     }
+
+                    // Automatically fetch user's profile from DB by their userId
+                    if (uid) {
+                      try {
+                        const existing = await getProfileByUserId(uid);
+                        if (existing && existing.id) {
+                          setProfile(existing);
+                          setProfileId(existing.id);
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem('scholarpilot_profile_id', String(existing.id));
+                            if (existing.fullName) {
+                              localStorage.setItem('scholarpilot_username', existing.fullName);
+                            }
+                          }
+                          addToast(
+                            'success',
+                            `Welcome back, ${formatDisplayName(existing.fullName || user.fullName)}!`,
+                            'Found your profile in database. Details auto-filled!'
+                          );
+                          // Seamlessly navigate to dashboard with pre-filled profile
+                          navigate(`/dashboard/${existing.id}`, 'dashboard', existing.id);
+                          loadDashboardData(existing.id);
+                          return;
+                        }
+                      } catch (err) {
+                        console.warn('Could not auto-fetch profile on login:', err);
+                      }
+                    }
+
+                    // Brand new user without an existing profile:
+                    setProfile((prev) => ({
+                      ...prev,
+                      fullName: formatted,
+                    }));
                     addToast('success', `Welcome, ${formatted}!`, 'Account ready! Now set up your scholar profile.');
                     navigate('/profile', 'profile');
                   }}

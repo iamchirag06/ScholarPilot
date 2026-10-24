@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '../ui/Button.tsx';
-import { RefreshCw, User, Sparkles } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 
 export type NavTab = 'home' | 'dashboard' | 'profile' | 'autofill' | 'tracker' | 'auth' | 'chat';
 
@@ -83,11 +83,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <button
                 onClick={onSwitchProfile}
-                title="Switch Profile / Sign Out"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#5E5A52] hover:text-[#E8622C] hover:bg-[#F8E4E0] transition-colors cursor-pointer border border-[#E9E1D3] bg-[#FFFDF8]"
+                title="Log Out"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#5E5A52] hover:text-[#D64545] hover:bg-[#FDECEB] transition-colors cursor-pointer border border-[#E9E1D3] bg-[#FFFDF8]"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Switch Account</span>
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">Log Out</span>
               </button>
 
               <Button
@@ -109,11 +109,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <button
                 onClick={onSwitchProfile}
-                title="Sign Out"
+                title="Log Out"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#5E5A52] hover:text-[#D64545] hover:bg-[#FDECEB] transition-colors cursor-pointer border border-[#E9E1D3] bg-[#FFFDF8]"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Sign Out</span>
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">Log Out</span>
               </button>
 
               <Button

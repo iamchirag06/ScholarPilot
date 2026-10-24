@@ -44,12 +44,16 @@ export function normalizeScheme(raw: any): Scheme {
     : [];
 
   // Confidence & Rank score
-  const confidence =
+  let confidence =
     typeof raw.confidence_score === 'number'
       ? raw.confidence_score
       : typeof raw.confidenceScore === 'number'
       ? raw.confidenceScore
       : 0.95;
+
+  if (confidence > 1) {
+    confidence = confidence / 100;
+  }
 
   const rank =
     typeof raw.rank_score === 'number'
@@ -98,9 +102,18 @@ export async function getMatchedSchemes(userIdParam?: string | number): Promise<
   }
 
   try {
-    const rawList = await apiFetch<any[]>(`/api/schemes/matched/${userId}`);
-    if (!Array.isArray(rawList)) return [];
-    return rawList.map(normalizeScheme);
+    const rawList = await apiFetch<any>(`/api/schemes/matched/${userId}`);
+    let listData: any[] = [];
+    if (Array.isArray(rawList)) {
+      listData = rawList;
+    } else if (rawList && typeof rawList === 'object' && Array.isArray(rawList.schemes)) {
+      listData = rawList.schemes;
+    } else if (rawList && typeof rawList === 'object' && Array.isArray(rawList.data)) {
+      listData = rawList.data;
+    } else {
+      return MOCK_SCHEMES;
+    }
+    return listData.map(normalizeScheme);
   } catch (err) {
     console.warn('Failed to load matched schemes, falling back to mock schemes', err);
     return MOCK_SCHEMES;
@@ -119,9 +132,18 @@ export async function getAllSchemes(): Promise<Scheme[]> {
   }
 
   try {
-    const rawList = await apiFetch<any[]>('/api/schemes/all');
-    if (!Array.isArray(rawList)) return [];
-    return rawList.map(normalizeScheme);
+    const rawList = await apiFetch<any>('/api/schemes/all');
+    let listData: any[] = [];
+    if (Array.isArray(rawList)) {
+      listData = rawList;
+    } else if (rawList && typeof rawList === 'object' && Array.isArray(rawList.schemes)) {
+      listData = rawList.schemes;
+    } else if (rawList && typeof rawList === 'object' && Array.isArray(rawList.data)) {
+      listData = rawList.data;
+    } else {
+      return MOCK_SCHEMES;
+    }
+    return listData.map(normalizeScheme);
   } catch (err) {
     console.warn('Failed to load all schemes from backend, falling back to mock schemes', err);
     return MOCK_SCHEMES;

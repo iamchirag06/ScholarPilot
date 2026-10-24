@@ -145,8 +145,8 @@ export function formatINR(val?: number | null): string {
   return '₹' + new Intl.NumberFormat('en-IN').format(val);
 }
 
-export function formatINRWords(val?: number | null): string {
-  const num = typeof val === 'number' && !isNaN(val) ? val : 0;
+export function formatINRWords(val?: number | string | null): string {
+  const num = typeof val === 'number' && !isNaN(val) ? val : Number(val) || 0;
   if (num >= 10000000) {
     const cr = (num / 10000000).toFixed(1).replace(/\.0$/, '');
     return `${formatINR(num)} · ${cr} Crore`;
@@ -205,14 +205,20 @@ export function getStoredUsername(): string {
   return '';
 }
 
-export function getDeadlineUrgency(deadlineStr: string): {
+export function getDeadlineUrgency(deadlineStr?: string | null): {
   daysLeft: number;
   label: string;
   color: string;
   bg: string;
 } {
+  if (!deadlineStr || typeof deadlineStr !== 'string' || !deadlineStr.trim()) {
+    return { daysLeft: 30, label: 'Ongoing Scheme', color: '#2F8F6B', bg: '#EDF8F3' };
+  }
   const target = new Date(deadlineStr);
-  const now = new Date('2026-10-24T00:55:00Z');
+  if (isNaN(target.getTime())) {
+    return { daysLeft: 30, label: deadlineStr.trim(), color: '#2F8F6B', bg: '#EDF8F3' };
+  }
+  const now = new Date();
   const diffTime = target.getTime() - now.getTime();
   const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 

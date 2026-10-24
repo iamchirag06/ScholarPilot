@@ -47,6 +47,7 @@ export function clearAuthData(): void {
     localStorage.removeItem('scholarpilot_username');
     localStorage.removeItem('scholarpilot_user');
     localStorage.removeItem('scholarpilot_profile_id');
+    localStorage.removeItem('scholarpilot_applications');
   }
 }
 
@@ -112,8 +113,25 @@ export async function register(email: string, password: string, fullName: string
  */
 export async function login(emailOrUsername: string, password: string): Promise<User> {
   const cleanInput = emailOrUsername.trim();
-  // Ensure valid email representation if username was entered
-  const emailToSend = cleanInput.includes('@') ? cleanInput : `${cleanInput}@example.com`;
+  // Check if username matches an existing stored user session
+  let matchedStoredEmail = '';
+  if (typeof window !== 'undefined') {
+    const rawUser = localStorage.getItem('scholarpilot_user');
+    if (rawUser) {
+      try {
+        const parsed = JSON.parse(rawUser);
+        if (
+          parsed.email &&
+          (parsed.email.toLowerCase() === cleanInput.toLowerCase() ||
+            parsed.fullName?.toLowerCase() === cleanInput.toLowerCase() ||
+            parsed.name?.toLowerCase() === cleanInput.toLowerCase())
+        ) {
+          matchedStoredEmail = parsed.email;
+        }
+      } catch {}
+    }
+  }
+  const emailToSend = cleanInput.includes('@') ? cleanInput : (matchedStoredEmail || cleanInput);
   const payload = {
     email: emailToSend,
     password,
@@ -267,7 +285,15 @@ export async function apiFetch<T>(
       return {} as T;
     }
 
-    return await response.json();
+    const text = await response.text();
+    if (!text || !text.trim()) {
+      return {} as T;
+    }
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return text as unknown as T;
+    }
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err instanceof ApiError) {
@@ -281,26 +307,64 @@ export async function apiFetch<T>(
   }
 }
 
-// Crawler & SSE Live Progress
-export async function startCrawl(): Promise<{ job_id: string }> {
+// Crawler & Live Progress (TinyFish Integration: Routes 13 & 14)
+
+/**
+ * 13. Start Crawl (Trigger Go/TinyFish) -> POST /api/crawl/start
+ * What to send: JSON with an array of urls to crawl (e.g., { "urls": ["NSP", "Haryana"] }).
+ * What it returns: A JSON object containing a job_id (e.g., { "job_id": "mock-job-123", "status": "started" }).
+ * You MUST save this job_id in your React state.
+ */
+export async function startCrawl(
+  urls: string[] = ['NSP', 'Haryana', 'AICTE', 'Delhi']
+): Promise<{ job_id: string; status?: string }> {
+  const payload = {
+    urls: Array.isArray(urls) && urls.length > 0 ? urls : ['NSP', 'Haryana', 'AICTE', 'Delhi'],
+  };
+
   if (isMockMode()) {
     await new Promise((res) => setTimeout(res, 300));
-    return { job_id: `job-${Date.now()}` };
+    return { job_id: `mock-job-${Date.now()}`, status: 'started' };
   }
 
   try {
-    return await apiFetch<{ job_id: string }>('/api/crawl/start', {
+    const res = await apiFetch<any>('/api/crawl/start', {
       method: 'POST',
+      body: JSON.stringify(payload),
     });
-  } catch {
-    // If crawler endpoint is not ready on backend, gracefully fallback to mock job_id
-    return { job_id: `job-${Date.now()}` };
+    const jobId = res.job_id || res.jobId || `job-${Date.now()}`;
+    return {
+      job_id: jobId,
+      status: res.status || 'started',
+    };
+  } catch (err: any) {
+    console.warn('Backend crawler start failed, falling back to local simulation job_id:', err.message);
+    return { job_id: `mock-job-${Date.now()}`, status: 'started' };
   }
 }
 
 /**
- * Fetch-based SSE reader with 2-minute (120s) realistic crawling simulation.
- * Supports speedMultiplier for optional fast-forwarding (default 1x = 120,000ms).
+ * 14. Check Crawl Status (Update Progress Bar) -> GET /api/crawl/status/{jobId}
+ * What to send: The job_id saved from Step 13 in the URL.
+ * What it returns: A JSON object with status and progress (e.g., { "status": "completed", "progress": 100 }).
+ */
+export async function getCrawlStatus(
+  jobId: string
+): Promise<{ status: string; progress: number; message?: string; schemes_found?: number; current_portal?: string }> {
+  const res = await apiFetch<any>(`/api/crawl/status/${encodeURIComponent(jobId)}`);
+  return {
+    status: String(res.status || 'crawling').toLowerCase(),
+    progress: typeof res.progress === 'number' ? res.progress : Number(res.progress) || 0,
+    message: res.message,
+    schemes_found: res.schemes_found ?? res.schemesFound,
+    current_portal: res.current_portal ?? res.currentPortal,
+  };
+}
+
+/**
+ * 14. Live Crawl Progress Reader with 2s polling & simulation fallback:
+ * Calls GET /api/crawl/status/{jobId} every 2 seconds via setInterval.
+ * Updates progress integer. Once status === 'completed', clears interval and invokes onComplete.
  */
 export function subscribeCrawlStatus(
   jobId: string,
@@ -310,8 +374,8 @@ export function subscribeCrawlStatus(
   speedMultiplier: number = 1
 ): () => void {
   let isCancelled = false;
+  let hasCompleted = false;
 
-  const candidateName = 'Student';
   // Realistic 2-minute (120s = 120,000ms) multi-stage crawling schedule
   const mockSteps: Array<{
     delayMs: number;
@@ -342,20 +406,55 @@ export function subscribeCrawlStatus(
   const timers: NodeJS.Timeout[] = [];
   const speed = Math.max(0.1, speedMultiplier);
 
+  // Fallback simulation timer schedule
   mockSteps.forEach((step) => {
     const delay = Math.round(step.delayMs / speed);
     const timer = setTimeout(() => {
-      if (isCancelled) return;
+      if (isCancelled || hasCompleted) return;
       onProgress(step.event);
       if (step.event.status === 'done') {
+        hasCompleted = true;
         onComplete();
       }
     }, delay);
     timers.push(timer);
   });
 
+  // Step 14: Polling GET /api/crawl/status/{jobId} every 2 seconds via setInterval
+  const pollIntervalMs = Math.round(2000 / speed);
+  const pollInterval = setInterval(async () => {
+    if (isCancelled || hasCompleted) return;
+    if (isMockMode() || jobId.startsWith('mock-')) return;
+
+    try {
+      const data = await getCrawlStatus(jobId);
+      if (isCancelled || hasCompleted) return;
+
+      onProgress({
+        status: data.status === 'completed' || data.status === 'done' ? 'done' : (data.status as any),
+        progress: data.progress,
+        message: data.message || `TinyFish crawling portals... (${data.progress}%)`,
+        schemes_found: data.schemes_found,
+        current_portal: data.current_portal,
+      });
+
+      // Once status === 'completed', clear interval and finish
+      if (data.status === 'completed' || data.status === 'done' || data.progress >= 100) {
+        hasCompleted = true;
+        clearInterval(pollInterval);
+        timers.forEach((t) => clearTimeout(t));
+        onComplete();
+      }
+    } catch (err: any) {
+      // Backend status endpoint might be temporarily unreachable, keep simulation running smoothly
+      console.warn('Crawl status poll returned error, continuing simulation ticker:', err.message);
+    }
+  }, pollIntervalMs);
+
   return () => {
     isCancelled = true;
+    hasCompleted = true;
+    clearInterval(pollInterval);
     timers.forEach((t) => clearTimeout(t));
   };
 }

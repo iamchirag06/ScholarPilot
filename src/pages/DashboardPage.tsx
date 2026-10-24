@@ -43,23 +43,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   // Capitalized display name for user
   const displayName = useMemo(
-    () => formatDisplayName(profile.fullName),
-    [profile.fullName]
+    () => formatDisplayName(profile?.fullName),
+    [profile?.fullName]
   );
 
   const totalGrantAmount = useMemo(() => {
-    return schemes.reduce((sum, s) => sum + (s.award_amount || 0), 0);
+    return (schemes || []).reduce((sum, s) => sum + (s?.award_amount || 0), 0);
   }, [schemes]);
 
   // Unique portals for filter chips
   const portalOptions = useMemo(() => {
-    const list = Array.from(new Set(schemes.map((s) => s.source_portal || 'National Portal')));
+    const list = Array.from(new Set((schemes || []).map((s) => s?.source_portal || 'National Portal')));
     return ['ALL', ...list];
   }, [schemes]);
 
   // Filtered schemes
   const filteredSchemes = useMemo(() => {
-    return schemes.filter((s) => {
+    return (schemes || []).filter((s) => {
+      if (!s) return false;
       const name = s.scheme_name || '';
       const provider = s.provider || '';
       const summary = s.llm_summary || '';
