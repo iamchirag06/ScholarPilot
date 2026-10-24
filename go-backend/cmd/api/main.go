@@ -24,9 +24,19 @@ func main() {
 	port := getEnv("PORT", "8082")
 	redisAddr := getEnv("REDIS_ADDR", "localhost:6380")
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr: redisAddr,
-	})
+	var opt *redis.Options
+	var err error
+	if len(redisAddr) > 8 && redisAddr[:8] == "redis://" {
+		opt, err = redis.ParseURL(redisAddr)
+	} else {
+		opt, err = redis.ParseURL("redis://" + redisAddr)
+	}
+
+	if err != nil {
+		log.Fatalf("[boot] invalid redis config: %v", err)
+	}
+
+	rdb := redis.NewClient(opt)
 
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer pingCancel()
