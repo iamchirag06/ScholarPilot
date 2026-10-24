@@ -48,9 +48,9 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
   useEffect(() => {
     const initialFields: FormFieldState[] = [
       {
-        key: 'full_name',
+        key: 'fullName',
         label: 'Applicant Full Name',
-        targetValue: profile.full_name,
+        targetValue: profile.fullName,
         currentValue: '',
         isHighlighting: false,
         isFilled: false,
@@ -80,28 +80,28 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
         isFilled: false,
       },
       {
-        key: 'course_level',
+        key: 'courseLevel',
         label: 'Current Academic Degree Level',
         targetValue:
-          profile.course_level === 'UG'
+          profile.courseLevel === 'UG'
             ? 'Undergraduate (UG Degree)'
-            : profile.course_level,
+            : profile.courseLevel,
         currentValue: '',
         isHighlighting: false,
         isFilled: false,
       },
       {
-        key: 'marks_percentage',
+        key: 'marksPercentage',
         label: 'Previous Qualifying Exam Marks (%)',
-        targetValue: `${profile.marks_percentage}%`,
+        targetValue: `${profile.marksPercentage}%`,
         currentValue: '',
         isHighlighting: false,
         isFilled: false,
       },
       {
-        key: 'annual_income',
+        key: 'annualIncome',
         label: 'Verified Gross Family Annual Income',
-        targetValue: formatINR(profile.annual_income),
+        targetValue: formatINR(profile.annualIncome),
         currentValue: '',
         isHighlighting: false,
         isFilled: false,
@@ -110,7 +110,7 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
 
     setFields(initialFields);
     const initialDocs: Record<string, boolean> = {};
-    scheme.required_documents.forEach((d) => {
+    (scheme.required_documents || []).forEach((d) => {
       initialDocs[d] = false;
     });
     setDocStatuses(initialDocs);

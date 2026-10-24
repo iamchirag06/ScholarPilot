@@ -19,53 +19,39 @@ npm run build
 
 ---
 
-## 2. Environment Variables & Modes
+## 2. Environment Variables & Backend Integration
 
-Configuration is stored in `.env` (or inherited from runtime environment):
+Configuration is stored in `.env.local` (or `.env`):
 
-| Variable | Default | Description |
-|---|---|---|
-| `VITE_USE_MOCK` or `NEXT_PUBLIC_USE_MOCK` | `true` | **`true`** for standalone mock mode (pre-agreed JSON data, simulated SSE streaming timer, offline demo). **`false`** to connect to Chirag's Java backend. |
-| `VITE_API_BASE_URL` or `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | URL of the Java backend service. |
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://underfeed-caterer-backlands.ngrok-free.dev
+NEXT_PUBLIC_USE_MOCK=false
+```
 
-### How to Toggle Mock Mode
-- **Via environment**: Set `VITE_USE_MOCK=false` in `.env` and restart Vite.
-- **In browser session**: Run `localStorage.setItem('scholarpilot_force_mock', 'false')` or `localStorage.removeItem('scholarpilot_force_mock')`.
-
----
-
-## 3. Demo Flow (What to Click)
-
-1. **Profile Form**: Visit **Profile** tab. Click *"Load Riya's Pre-agreed Profile"* (Riya, Female, SC, Haryana, UG, 78% marks, ₹2,00,000 income).
-2. **"Find Scholarships"**: Triggers `PUT /api/profile` and `POST /api/crawl/start`.
-3. **Live Progress Screen**: Watch the cat illustration and live SSE status updates (*"TinyFish connecting to NSP..."* → *"Haryana Har-Chhatravratti..."* → *"Deepak AI summarizing..."*).
-4. **Ranked Matches Dashboard**: Shows *"5 Scholarships Worth ₹3,02,000 Found for You, Riya"* with hand-inked underlines, match confidence bars, and the *"See the original legalese"* toggle showing the transformation into 1 plain-English sentence.
-5. **Auto-Fill Demo**: Click **Auto-Fill** to watch the typewriter effect populate all 7 fields one by one with orange highlighter swipes, green checkmarks, and verified documents.
-6. **Kanban Tracker Board**: Drag-and-drop cards between *Eligible*, *Applied*, *Pending*, *Approved*, and *Rejected*. Shows the total grant amount in the pipeline, and drops into *Approved* burst into celebration confetti!
+> [!IMPORTANT]
+> **ngrok Tunnel Restarts:**
+> The backend is served through an ngrok tunnel. Whenever the ngrok tunnel restarts, the URL changes. When that happens, **only `NEXT_PUBLIC_API_BASE_URL` needs updating** in `.env.local`.
+> All requests automatically include the `ngrok-skip-browser-warning: true` header and a 15-second abort timeout.
+> To fall back to offline mock mode at any time, simply set `NEXT_PUBLIC_USE_MOCK=true`.
 
 ---
 
-## 4. Swappable Hand-Inked Illustrations
+## 3. Real Backend API Contract
 
-All illustrations are located in `/public/illustrations/` as vector SVGs and wrapped in `<...Illustration />` components in `src/components/illustrations/Illustrations.tsx`:
-
-- `public/illustrations/hero-student.svg`: Student at desk with laptop, sleeping cat, tea mug, and stacked books.
-- `public/illustrations/student-with-mug.svg`: Student with warm cup of chai.
-- `public/illustrations/books-stack.svg`: Stack with spines titled *"Study Better"*, *"Dream Brighter"*, *"Apply Together"*.
-- `public/illustrations/cat.svg`: Sleeping study cat with floating *zzz*.
-- `public/illustrations/mug.svg`: Steaming chai mug.
-- `public/illustrations/plant-left.svg` & `plant-right.svg`: Desk plants.
-
-To replace any illustration with bespoke artwork from your design team, drop your SVG file directly into `/public/illustrations/` with the same filename. Zero code changes required!
+All profile and scheme interactions use the live backend:
+- `POST /api/profiles/create` → creates profile, validates duplicate (`fullName` + `state`), returns new profile with `id`.
+- `GET /api/profiles/all` → lists all profiles (used by dev-only test picker on onboarding).
+- `GET /api/profiles/{id}` → loads profile for `/dashboard/{id}` and prefills edit form.
+- `PUT /api/profiles/{id}` → sends only modified fields (computes diff between original and edited form).
+- `GET /api/schemes/matched/{id}` → retrieves ranked scholarship matches for the profile with defensive normalization.
 
 ---
 
-## 5. API Contract Integration (Java Backend on Port 8080)
+## 4. Navigation & Flow
 
-All network calls are strictly centralized in `src/services/api.ts`:
-- `POST /api/auth/login`, `POST /api/auth/register` (Bearer token stored in `localStorage`)
-- `GET /api/profile`, `PUT /api/profile`
-- `POST /api/crawl/start` → returns `{ job_id }`
-- `GET /api/crawl/status/{job_id}` → Fetch-based SSE reader with Authorization header support
-- `GET /api/schemes/matched` → Returns ranked schemes
-- `PUT /api/applications/{scheme_id}` → Body `{ status }` with optimistic updates & rollback
+1. **Profile Guard**: If no profile ID exists in `localStorage` (`scholarpilot_profile_id`), the app guards protected routes and opens onboarding (`/profile`).
+2. **Onboarding / Creation**: Fill the 4-step form or pick an existing profile using the dev-only dropdown (`NODE_ENV !== 'production'`).
+3. **Redirect to Dashboard**: On submission, immediately redirects to `/dashboard/{id}` with personalized greeting *"Welcome, {fullName}"* and ranked scholarships.
+4. **Edit Profile**: Click *"Edit Profile"* from the dashboard to prefill the form and submit only modified fields via `PUT /api/profiles/{id}`.
+5. **Switch Profile**: In the navbar, the *"Switch Profile"* button clears the active ID and returns to onboarding.
+

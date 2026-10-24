@@ -13,9 +13,9 @@ interface AuthPageProps {
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, onCancel }) => {
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('riya.sharma@example.edu.in');
-  const [password, setPassword] = useState('password123');
-  const [fullName, setFullName] = useState('Riya');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -80,7 +80,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, onCancel }) => {
           {isRegister && (
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-[#5E5A52] mb-1.5">
-                Full Name
+                Full Name / Username
               </label>
               <div className="relative">
                 <UserIcon className="w-4 h-4 text-[#5E5A52] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -89,7 +89,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, onCancel }) => {
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Riya Sharma"
+                  placeholder="e.g. Abhi"
                   className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#1F5A45]"
                 />
               </div>
@@ -98,16 +98,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, onCancel }) => {
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#5E5A52] mb-1.5">
-              Email Address
+              {isRegister ? 'Email Address' : 'Username or Email'}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-[#5E5A52] absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="riya@example.edu.in"
+                placeholder={isRegister ? 'you@example.edu.in' : 'e.g. abhi or riya@example.edu.in'}
                 className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-sm text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#1F5A45]"
               />
             </div>

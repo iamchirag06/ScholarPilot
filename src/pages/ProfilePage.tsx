@@ -1,30 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { Profile, Category, CourseLevel, Gender } from '../types/index.ts';
-import { INDIAN_STATES, formatINRWords } from '../mockData.ts';
+import { INDIAN_STATES, formatINRWords, DEMO_PROFILE } from '../mockData.ts';
+import { getAllProfiles } from '../services/profiles.ts';
 import { Button } from '../components/ui/Button.tsx';
 import { StickyNote } from '../components/decorative/StickyNote.tsx';
 import { Scribble } from '../components/decorative/Scribble.tsx';
 import { CatIllustration } from '../components/illustrations/Illustrations.tsx';
-import { Check, ArrowLeft, ArrowRight, Sparkles, User, GraduationCap, IndianRupee } from 'lucide-react';
+import {
+  Check,
+  ArrowLeft,
+  ArrowRight,
+  Sparkles,
+  User,
+  GraduationCap,
+  IndianRupee,
+  RefreshCw,
+  AlertCircle,
+} from 'lucide-react';
 
 interface ProfilePageProps {
   initialProfile: Profile;
-  onSaveAndStartCrawl: (profile: Profile) => void;
+  onSaveProfile: (profile: Profile) => Promise<void> | void;
   isEditMode?: boolean;
+  onSelectExistingProfile?: (profileId: string | number) => void;
+  isSubmitting?: boolean;
+  errorMessage?: string | null;
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({
   initialProfile,
-  onSaveAndStartCrawl,
+  onSaveProfile,
   isEditMode = false,
+  onSelectExistingProfile,
+  isSubmitting = false,
+  errorMessage = null,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [existingProfiles, setExistingProfiles] = useState<Profile[]>([]);
+  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
+
+  const isDev = Boolean((import.meta as any).env?.DEV);
 
   useEffect(() => {
     setProfile(initialProfile);
   }, [initialProfile]);
+
+  // Dev-only: load existing profiles for quick picker
+  useEffect(() => {
+    if (isDev && !isEditMode) {
+      setIsLoadingExisting(true);
+      getAllProfiles()
+        .then((list) => setExistingProfiles(list))
+        .catch(() => {})
+        .finally(() => setIsLoadingExisting(false));
+    }
+  }, [isDev, isEditMode]);
 
   // Step Tips
   const stepTips: Record<number, { text: string; color: 'yellow' | 'pink' | 'mint' | 'peach' }> = {
@@ -41,7 +73,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
       color: 'pink',
     },
     4: {
-      text: 'Looking sharp! Click below to trigger the crawler across 12 portals.',
+      text: 'Looking sharp! Submit to rank all live matching schemes against government criteria.',
       color: 'peach',
     },
   };
@@ -50,22 +82,39 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     const errs: Record<string, string> = {};
 
     if (currentStep === 1) {
-      if (!profile.full_name.trim()) errs.full_name = 'Please provide your full name';
-      if (!profile.state) errs.state = 'Please select your state/UT';
-      if (!profile.gender) errs.gender = 'Please select your gender';
+      if (!profile.fullName || !profile.fullName.trim()) {
+        errs.fullName = 'Please provide your full name';
+      }
+      if (!profile.state) {
+        errs.state = 'Please select your state/UT';
+      }
+      if (!profile.gender) {
+        errs.gender = 'Please select your gender';
+      }
     } else if (currentStep === 2) {
-      if (!profile.course_level) errs.course_level = 'Please select your course level';
+      if (!profile.courseLevel) {
+        errs.courseLevel = 'Please select your course level';
+      }
       if (
-        profile.marks_percentage === undefined ||
-        profile.marks_percentage < 0 ||
-        profile.marks_percentage > 100
+        profile.marksPercentage === undefined ||
+        profile.marksPercentage === null ||
+        isNaN(Number(profile.marksPercentage)) ||
+        Number(profile.marksPercentage) < 0 ||
+        Number(profile.marksPercentage) > 100
       ) {
-        errs.marks_percentage = 'Marks must be between 0% and 100%';
+        errs.marksPercentage = 'Marks must be a valid number between 0% and 100%';
       }
     } else if (currentStep === 3) {
-      if (!profile.category) errs.category = 'Please select your category';
-      if (profile.annual_income === undefined || profile.annual_income < 0) {
-        errs.annual_income = 'Please enter a valid family income';
+      if (!profile.category) {
+        errs.category = 'Please select your category';
+      }
+      if (
+        profile.annualIncome === undefined ||
+        profile.annualIncome === null ||
+        isNaN(Number(profile.annualIncome)) ||
+        Number(profile.annualIncome) < 0
+      ) {
+        errs.annualIncome = 'Please enter a non-negative integer for family income';
       }
     }
 
@@ -88,9 +137,36 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     e.preventDefault();
     if (step < 4) {
       handleNext();
-    } else {
-      onSaveAndStartCrawl(profile);
+      return;
     }
+
+    // Comprehensive final validation before sending
+    const v1 = validateStep(1);
+    const v2 = validateStep(2);
+    const v3 = validateStep(3);
+
+    if (!v1) {
+      setStep(1);
+      return;
+    }
+    if (!v2) {
+      setStep(2);
+      return;
+    }
+    if (!v3) {
+      setStep(3);
+      return;
+    }
+
+    const cleanedProfile: Profile = {
+      ...profile,
+      fullName: profile.fullName.trim(),
+      annualIncome: Math.round(Math.max(0, Number(profile.annualIncome))),
+      marksPercentage: parseFloat(Number(profile.marksPercentage).toFixed(2)),
+      isDisabled: Boolean(profile.isDisabled),
+    };
+
+    onSaveProfile(cleanedProfile);
   };
 
   return (
@@ -98,72 +174,107 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
       {/* Title & Eyebrow */}
       <div className="text-center mb-8">
         <span className="font-script text-2xl text-[#E8622C] font-bold block mb-1">
-          {isEditMode ? 'Update Your Scholar Profile' : 'Step Into Your Journey'}
+          {isEditMode ? 'Update Your Preferences ✦' : 'Your Eligibility Passport ✦'}
         </span>
         <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl font-bold text-[#1A1A1A] tracking-tight">
-          {step === 4 ? 'Review & Launch Search' : 'Tell Us About You'}
+          {isEditMode ? 'Edit Scholar Profile' : 'Set Up Your Scholar Profile'}
         </h1>
-        <p className="mt-2 text-sm sm:text-base text-[#5E5A52]">
-          Our matching engine filters through 500+ government and trust criteria for your exact profile.
+        <p className="mt-3 text-base text-[#5E5A52] max-w-xl mx-auto">
+          {isEditMode
+            ? 'Update your academic, income, or category details to discover refreshed scholarship matches.'
+            : 'Fill in your academic and background details once. TinyFish will match 500+ government and private schemes.'}
         </p>
       </div>
 
-      {/* Stepper: Hand-drawn dots joined by a wobbly line */}
-      <div className="max-w-md mx-auto mb-10 relative">
-        {/* Connecting line */}
-        <div className="absolute top-4 left-6 right-6 h-1 bg-[#E9E1D3] -z-0">
-          <div
-            className="h-full bg-[#1F5A45] transition-all duration-300"
-            style={{ width: `${((step - 1) / 3) * 100}%` }}
-          />
+      {/* Dev-Only: Select Existing Profile Dropdown */}
+      {isDev && !isEditMode && onSelectExistingProfile && existingProfiles.length > 0 && (
+        <div className="mb-8 p-4 rounded-2xl bg-[#EDF8F3] border border-[#2F8F6B]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-[#1F5A45] flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#2F8F6B]" />
+              Dev Mode: Select Existing Profile for Testing
+            </span>
+            <p className="text-xs text-[#5E5A52] mt-0.5">
+              Jump straight to any existing backend profile without creating a new one:
+            </p>
+          </div>
+          <select
+            defaultValue=""
+            disabled={isLoadingExisting || isSubmitting}
+            onChange={(e) => {
+              const selectedId = e.target.value;
+              if (selectedId) {
+                onSelectExistingProfile(selectedId);
+              }
+            }}
+            className="text-xs font-semibold px-3 py-2 rounded-xl bg-[#FFFDF8] border border-[#2F8F6B]/40 text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#1F5A45] cursor-pointer"
+          >
+            <option value="" disabled>
+              Select existing profile...
+            </option>
+            {existingProfiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.fullName} (ID: {p.id} · {p.state} · {p.category})
+              </option>
+            ))}
+          </select>
         </div>
+      )}
 
-        <div className="flex items-center justify-between relative z-10">
+      {/* Top Banner Error (e.g. Duplicate Profile Validation from Backend) */}
+      {errorMessage && (
+        <div className="mb-8 p-4 rounded-xl bg-[#FDECEB] border border-[#D64545]/30 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-[#D64545] shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-bold text-[#D64545]">Submission Error</h4>
+            <p className="text-xs text-[#D64545]/90 mt-0.5 font-medium">{errorMessage}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 4-Step Paper Stepper */}
+      <div className="mb-10 bg-[#FFFDF8] p-3 rounded-2xl border border-[#E9E1D3] shadow-xs max-w-2xl mx-auto">
+        <div className="grid grid-cols-4 gap-2 text-center">
           {[
-            { num: 1, label: 'Personal' },
+            { num: 1, label: 'Identity' },
             { num: 2, label: 'Academic' },
-            { num: 3, label: 'Financial' },
+            { num: 3, label: 'Category' },
             { num: 4, label: 'Review' },
-          ].map((item) => {
-            const isCompleted = step > item.num;
-            const isCurrent = step === item.num;
-
+          ].map((s) => {
+            const isActive = step === s.num;
+            const isCompleted = step > s.num;
             return (
-              <div key={item.num} className="flex flex-col items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (item.num < step) setStep(item.num as any);
-                  }}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
-                    isCompleted
-                      ? 'bg-[#1F5A45] text-white'
-                      : isCurrent
-                      ? 'bg-[#E8622C] text-white ring-4 ring-[#E8622C]/20 scale-110'
-                      : 'bg-[#FFFDF8] text-[#5E5A52] border border-[#E9E1D3]'
-                  }`}
-                >
-                  {isCompleted ? <Check className="w-4 h-4 stroke-[3]" /> : item.num}
-                </button>
-                <span
-                  className={`mt-1.5 text-xs font-semibold ${
-                    isCurrent ? 'text-[#E8622C]' : 'text-[#5E5A52]'
-                  }`}
-                >
-                  {item.label}
-                </span>
-              </div>
+              <button
+                key={s.num}
+                type="button"
+                onClick={() => {
+                  if (s.num < step || isEditMode) {
+                    setStep(s.num as any);
+                  }
+                }}
+                className={`py-2 px-1 rounded-xl transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-[#1F5A45] text-white shadow-xs font-bold'
+                    : isCompleted
+                    ? 'bg-[#EDF8F3] text-[#1F5A45] font-semibold'
+                    : 'text-[#5E5A52] hover:bg-[#FBF6EE]'
+                }`}
+              >
+                <div className="text-xs">
+                  {isCompleted ? '✓' : `0${s.num}`}
+                </div>
+                <div className="text-xs sm:text-sm truncate">{s.label}</div>
+              </button>
             );
           })}
         </div>
       </div>
 
-      {/* Main Grid: Form Card + Sticky Note Tip */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Form Card */}
-        <div className="lg:col-span-8 paper-card p-6 sm:p-10 relative">
+        {/* Main Form Paper Card */}
+        <div className="lg:col-span-8 paper-card p-6 sm:p-8">
           <form onSubmit={handleSubmit} noValidate>
-            {/* STEP 1: PERSONAL */}
+            {/* STEP 1: IDENTITY */}
             {step === 1 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-2 pb-3 border-b border-[#E9E1D3]">
@@ -175,50 +286,51 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#5E5A52] mb-1.5">
-                    Full Name
+                    Full Name <span className="text-[#D64545]">*</span>
                   </label>
                   <input
                     type="text"
-                    value={profile.full_name}
+                    required
+                    value={profile.fullName}
                     onChange={(e) =>
-                      setProfile({ ...profile, full_name: e.target.value })
+                      setProfile({ ...profile, fullName: e.target.value })
                     }
-                    placeholder="e.g. Riya Sharma"
+                    placeholder="e.g. Abhi Sharma"
                     className="w-full px-4 py-3 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] text-base focus:outline-none focus:ring-2 focus:ring-[#1F5A45] focus:bg-[#FFFDF8] transition-all"
                   />
-                  {errors.full_name && (
-                    <p className="mt-1 text-xs text-[#D64545] font-medium">{errors.full_name}</p>
+                  {errors.fullName && (
+                    <p className="mt-1 text-xs text-[#D64545] font-medium">{errors.fullName}</p>
                   )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-[#5E5A52] mb-1.5">
-                      Gender
+                      Gender <span className="text-[#D64545]">*</span>
                     </label>
                     <select
                       value={profile.gender}
                       onChange={(e) =>
                         setProfile({ ...profile, gender: e.target.value as Gender })
                       }
-                      className="w-full px-4 py-3 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] text-base focus:outline-none focus:ring-2 focus:ring-[#1F5A45] focus:bg-[#FFFDF8] transition-all"
+                      className="w-full px-4 py-3 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] text-base focus:outline-none focus:ring-2 focus:ring-[#1F5A45] focus:bg-[#FFFDF8] transition-all cursor-pointer"
                     >
-                      <option value="FEMALE">Female</option>
                       <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
                       <option value="OTHER">Other</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-[#5E5A52] mb-1.5">
-                      Domicile / Home State
+                      Domicile / Home State <span className="text-[#D64545]">*</span>
                     </label>
                     <select
                       value={profile.state}
                       onChange={(e) =>
                         setProfile({ ...profile, state: e.target.value })
                       }
-                      className="w-full px-4 py-3 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] text-base focus:outline-none focus:ring-2 focus:ring-[#1F5A45] focus:bg-[#FFFDF8] transition-all"
+                      className="w-full px-4 py-3 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] text-base focus:outline-none focus:ring-2 focus:ring-[#1F5A45] focus:bg-[#FFFDF8] transition-all cursor-pointer"
                     >
                       {INDIAN_STATES.map((st) => (
                         <option key={st} value={st}>
@@ -237,9 +349,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   <label className="flex items-center gap-3 p-3.5 rounded-lg border border-[#E9E1D3] bg-[#FBF6EE]/60 cursor-pointer hover:bg-[#FBF6EE]">
                     <input
                       type="checkbox"
-                      checked={profile.is_disabled}
+                      checked={profile.isDisabled}
                       onChange={(e) =>
-                        setProfile({ ...profile, is_disabled: e.target.checked })
+                        setProfile({ ...profile, isDisabled: e.target.checked })
                       }
                       className="w-5 h-5 rounded text-[#1F5A45] focus:ring-[#1F5A45] accent-[#1F5A45] cursor-pointer"
                     />
@@ -268,7 +380,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#5E5A52] mb-1.5">
-                    Current Course Level
+                    Current Course Level <span className="text-[#D64545]">*</span>
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {(
@@ -280,15 +392,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         { id: 'PHD', label: 'PhD / Research' },
                       ] as const
                     ).map((lvl) => {
-                      const isSelected = profile.course_level === lvl.id;
+                      const isSelected = profile.courseLevel === lvl.id;
                       return (
                         <button
                           key={lvl.id}
                           type="button"
                           onClick={() =>
-                            setProfile({ ...profile, course_level: lvl.id as CourseLevel })
+                            setProfile({ ...profile, courseLevel: lvl.id as CourseLevel })
                           }
-                          className={`p-3 rounded-lg border text-sm font-semibold text-left transition-all ${
+                          className={`p-3 rounded-lg border text-sm font-semibold text-left transition-all cursor-pointer ${
                             isSelected
                               ? 'bg-[#1F5A45] text-white border-[#1F5A45] shadow-xs'
                               : 'bg-[#FBF6EE] text-[#1A1A1A] border-[#E9E1D3] hover:border-[#1F5A45]'
@@ -304,10 +416,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-[#5E5A52]">
-                      Previous Exam Marks (%)
+                      Previous Exam Marks (%) <span className="text-[#D64545]">*</span>
                     </label>
                     <span className="font-serif text-lg font-bold text-[#1F5A45] tabular-nums">
-                      {profile.marks_percentage}%
+                      {profile.marksPercentage}%
                     </span>
                   </div>
                   <input
@@ -315,11 +427,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     min="35"
                     max="100"
                     step="0.5"
-                    value={profile.marks_percentage}
+                    value={profile.marksPercentage}
                     onChange={(e) =>
                       setProfile({
                         ...profile,
-                        marks_percentage: parseFloat(e.target.value) || 0,
+                        marksPercentage: parseFloat(e.target.value) || 0,
                       })
                     }
                     className="w-full accent-[#E8622C] cursor-pointer"
@@ -330,9 +442,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     <span>75% (Distinction)</span>
                     <span>100%</span>
                   </div>
-                  {errors.marks_percentage && (
+                  {errors.marksPercentage && (
                     <p className="mt-1 text-xs text-[#D64545] font-medium">
-                      {errors.marks_percentage}
+                      {errors.marksPercentage}
                     </p>
                   )}
                 </div>
@@ -351,7 +463,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#5E5A52] mb-1.5">
-                    Social Category
+                    Social Category <span className="text-[#D64545]">*</span>
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {(['GENERAL', 'OBC', 'SC', 'ST', 'EWS'] as Category[]).map((cat) => {
@@ -361,7 +473,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                           key={cat}
                           type="button"
                           onClick={() => setProfile({ ...profile, category: cat })}
-                          className={`py-3 px-2 rounded-lg border text-sm font-bold transition-all text-center ${
+                          className={`py-3 px-2 rounded-lg border text-sm font-bold transition-all text-center cursor-pointer ${
                             isSelected
                               ? 'bg-[#E8622C] text-white border-[#E8622C] shadow-xs'
                               : 'bg-[#FBF6EE] text-[#1A1A1A] border-[#E9E1D3] hover:border-[#E8622C]'
@@ -376,16 +488,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#5E5A52] mb-1.5">
-                    Annual Family Income (INR)
+                    Annual Family Income (INR) <span className="text-[#D64545]">*</span>
                   </label>
                   <input
                     type="number"
-                    step="10000"
-                    value={profile.annual_income}
+                    min="0"
+                    step="5000"
+                    value={profile.annualIncome}
                     onChange={(e) =>
                       setProfile({
                         ...profile,
-                        annual_income: parseInt(e.target.value) || 0,
+                        annualIncome: Math.max(0, parseInt(e.target.value) || 0),
                       })
                     }
                     className="w-full px-4 py-3 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] text-lg font-serif font-bold focus:outline-none focus:ring-2 focus:ring-[#1F5A45] focus:bg-[#FFFDF8] transition-all"
@@ -393,11 +506,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   {/* Live ₹ Preview in Indian words */}
                   <div className="mt-2 flex items-center gap-2 text-sm text-[#1F5A45] font-semibold">
                     <span className="w-2 h-2 rounded-full bg-[#2F8F6B]" />
-                    <span>Formatted: {formatINRWords(profile.annual_income)}</span>
+                    <span>Formatted: {formatINRWords(profile.annualIncome)}</span>
                   </div>
-                  {errors.annual_income && (
+                  {errors.annualIncome && (
                     <p className="mt-1 text-xs text-[#D64545] font-medium">
-                      {errors.annual_income}
+                      {errors.annualIncome}
                     </p>
                   )}
                 </div>
@@ -421,7 +534,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         Full Name
                       </span>
                       <span className="font-serif text-lg font-bold text-[#1A1A1A]">
-                        {profile.full_name}
+                        {profile.fullName || '—'}
                       </span>
                     </div>
 
@@ -439,7 +552,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         Course Level
                       </span>
                       <span className="font-serif text-lg font-bold text-[#1A1A1A]">
-                        {profile.course_level}
+                        {profile.courseLevel}
                       </span>
                     </div>
 
@@ -448,7 +561,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         Marks Percentage
                       </span>
                       <span className="font-serif text-lg font-bold text-[#1F5A45]">
-                        {profile.marks_percentage}%
+                        {profile.marksPercentage}%
                       </span>
                     </div>
 
@@ -466,7 +579,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         Annual Income
                       </span>
                       <span className="font-serif text-lg font-bold text-[#1A1A1A]">
-                        {formatINRWords(profile.annual_income)}
+                        {formatINRWords(profile.annualIncome)}
                       </span>
                     </div>
                   </div>
@@ -475,7 +588,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 <div className="p-3.5 rounded-lg bg-[#EDF8F3] border border-[#2F8F6B]/30 text-xs text-[#1F5A45] font-medium flex items-center gap-2">
                   <Check className="w-4 h-4 text-[#2F8F6B] shrink-0" />
                   <span>
-                    Ready! TinyFish worker and AI summarizer will rank the best matched schemes immediately.
+                    Ready! Your details will be sent to the backend matching engine to find all qualified government and trust grants.
                   </span>
                 </div>
               </div>
@@ -489,11 +602,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   variant="secondary"
                   size="md"
                   onClick={handleBack}
+                  disabled={isSubmitting}
                 >
-                  <span className="flex items-center gap-1.5">
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Previous</span>
-                  </span>
+                  <ArrowLeft className="w-4 h-4 mr-1.5" />
+                  Back
                 </Button>
               ) : (
                 <div />
@@ -506,6 +618,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   size="md"
                   onClick={handleNext}
                   showArrow
+                  disabled={isSubmitting}
                 >
                   Continue
                 </Button>
@@ -515,9 +628,19 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   variant="primary"
                   size="lg"
                   showArrow
-                  className="bg-[#1A1A1A] text-white shadow-md"
+                  disabled={isSubmitting}
+                  className="bg-[#1A1A1A] text-white shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Find Scholarships
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Saving Profile...
+                    </>
+                  ) : isEditMode ? (
+                    'Update Profile & View Matches'
+                  ) : (
+                    'Find Scholarships'
+                  )}
                 </Button>
               )}
             </div>
@@ -543,21 +666,22 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               Demo Persona Shortcut
             </span>
             <p className="text-xs text-[#5E5A52] mb-3">
-              Load official test persona: Riya (SC, Haryana, UG, ₹2 Lakh income).
+              Load test persona: Riya (SC, Haryana, UG, ₹2 Lakh income).
             </p>
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={() => {
                 setProfile({
-                  user_id: 'usr-riya-2026',
-                  full_name: 'Riya',
+                  id: DEMO_PROFILE.id,
+                  fullName: 'Riya',
                   category: 'SC',
-                  annual_income: 200000,
+                  annualIncome: 200000,
                   state: 'Haryana',
-                  course_level: 'UG',
+                  courseLevel: 'UG',
                   gender: 'FEMALE',
-                  is_disabled: false,
-                  marks_percentage: 78.0,
+                  isDisabled: false,
+                  marksPercentage: 78.0,
                 });
                 setStep(4);
               }}

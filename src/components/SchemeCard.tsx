@@ -59,7 +59,7 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({
   };
 
   const portalBadge = getPortalBadge();
-  const confidencePercent = Math.round(scheme.confidence_score * 100);
+  const confidencePercent = Math.round((scheme.confidence_score ?? ((scheme.rank_score ?? 95) / 100)) * 100);
 
   return (
     <article className="paper-card paper-card-interactive p-6 flex flex-col justify-between relative overflow-hidden group">
@@ -133,14 +133,18 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({
             <span>Required Documents</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {scheme.required_documents.map((doc, idx) => (
-              <span
-                key={idx}
-                className="text-xs bg-[#FFFDF8] text-[#5E5A52] border border-[#E9E1D3] rounded-md px-2 py-0.5 font-medium"
-              >
-                {doc}
-              </span>
-            ))}
+            {(scheme.required_documents || []).length > 0 ? (
+              (scheme.required_documents || []).map((doc, idx) => (
+                <span
+                  key={idx}
+                  className="text-xs bg-[#FFFDF8] text-[#5E5A52] border border-[#E9E1D3] rounded-md px-2 py-0.5 font-medium"
+                >
+                  {doc}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-[#5E5A52]/70 italic">None specified by portal</span>
+            )}
           </div>
         </div>
 

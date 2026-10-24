@@ -6,20 +6,20 @@ export type ApplicationStatus = 'ELIGIBLE' | 'APPLIED' | 'PENDING' | 'APPROVED' 
 export interface User {
   id: string;
   email: string;
-  full_name: string;
+  fullName: string;
   token?: string;
 }
 
 export interface Profile {
-  user_id: string;
-  full_name: string;
+  id?: number | string; // returned by backend after create
+  fullName: string;
   category: Category;
-  annual_income: number;
+  annualIncome: number;
   state: string;
-  course_level: CourseLevel;
+  courseLevel: CourseLevel;
   gender: Gender;
-  is_disabled: boolean;
-  marks_percentage: number;
+  isDisabled: boolean;
+  marksPercentage: number;
 }
 
 export interface Scheme {

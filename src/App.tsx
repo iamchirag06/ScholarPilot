@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navbar, NavTab } from './components/layout/Navbar.tsx';
 import { Footer } from './components/layout/Footer.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
@@ -7,28 +7,65 @@ import { ProgressPage } from './pages/ProgressPage.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { AutoFillPage } from './pages/AutoFillPage.tsx';
 import { TrackerPage } from './pages/TrackerPage.tsx';
-import { AuthPage } from './pages/AuthPage.tsx';
 import { ToastContainer, ToastMessage } from './components/ui/Toast.tsx';
 import {
   Profile,
   Scheme,
   Application,
-  User,
   ApplicationStatus,
 } from './types/index.ts';
-import { DEMO_PROFILE, DEMO_USER, MOCK_SCHEMES, INITIAL_APPLICATIONS } from './mockData.ts';
+import { DEMO_PROFILE, MOCK_SCHEMES, INITIAL_APPLICATIONS, formatDisplayName } from './mockData.ts';
 import {
   getProfile,
+  createProfile,
   updateProfile,
-  startCrawl,
   getMatchedSchemes,
   getApplications,
   updateApplicationStatus,
+  startCrawl,
+  ApiError,
 } from './services/api.ts';
 
+// Helper to parse current path and extract route and dynamic ID
+function parseCurrentUrl(): { tab: NavTab; id: string | null } {
+  if (typeof window === 'undefined') return { tab: 'home', id: null };
+  const pathname = window.location.pathname;
+
+  const dashboardMatch = pathname.match(/^\/dashboard\/([^/]+)/);
+  if (dashboardMatch) {
+    return { tab: 'dashboard', id: dashboardMatch[1] };
+  }
+  if (pathname.startsWith('/dashboard')) {
+    return { tab: 'dashboard', id: null };
+  }
+  if (pathname.startsWith('/profile') || pathname.startsWith('/onboarding')) {
+    return { tab: 'profile', id: null };
+  }
+  if (pathname.startsWith('/autofill')) {
+    return { tab: 'autofill', id: null };
+  }
+  if (pathname.startsWith('/tracker')) {
+    return { tab: 'tracker', id: null };
+  }
+  return { tab: 'home', id: null };
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('home');
-  const [currentUser, setCurrentUser] = useState<User | null>(DEMO_USER);
+  const initialUrl = useMemo(() => parseCurrentUrl(), []);
+
+  // Profile ID replaces JWT in localStorage
+  const [profileId, setProfileId] = useState<string | number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('scholarpilot_profile_id');
+      return initialUrl.id || stored || null;
+    }
+    return null;
+  });
+
+  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    return initialUrl.tab;
+  });
+
   const [profile, setProfile] = useState<Profile>(DEMO_PROFILE);
   const [schemes, setSchemes] = useState<Scheme[]>(MOCK_SCHEMES);
   const [applications, setApplications] = useState<Application[]>(INITIAL_APPLICATIONS);
@@ -37,10 +74,15 @@ export default function App() {
     new Set(['uuid-5555-6666', 'uuid-3333-4444', 'uuid-1111-2222'])
   );
 
+  // Loading & Error states
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
+  const [profileErrorMessage, setProfileErrorMessage] = useState<string | null>(null);
+
   // Crawler Live Progress State
   const [isCrawling, setIsCrawling] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string>('job-init');
-  const [isLoadingData, setIsLoadingData] = useState(false);
 
   // Toast notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -50,55 +92,201 @@ export default function App() {
     setToasts((prev) => [...prev, { id, type, title, message }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, 4500);
   };
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Initial data loading on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const storedUser = localStorage.getItem('scholarpilot_user');
-        if (storedUser) {
-          setCurrentUser(JSON.parse(storedUser));
+  // URL Navigation helper
+  const navigate = useCallback(
+    (url: string, tab: NavTab, targetProfileId?: string | number | null) => {
+      if (typeof window !== 'undefined') {
+        window.history.pushState({}, '', url);
+      }
+      if (targetProfileId !== undefined) {
+        setProfileId(targetProfileId);
+        if (targetProfileId) {
+          localStorage.setItem('scholarpilot_profile_id', String(targetProfileId));
         } else {
-          setCurrentUser(DEMO_USER);
+          localStorage.removeItem('scholarpilot_profile_id');
         }
+      }
+      setIsCrawling(false);
+      setActiveTab(tab);
+    },
+    []
+  );
 
-        const prof = await getProfile();
-        setProfile(prof);
+  // Listen to popstate (browser back/forward button)
+  useEffect(() => {
+    const handlePopState = () => {
+      const { tab, id } = parseCurrentUrl();
+      if (id) {
+        setProfileId(id);
+        localStorage.setItem('scholarpilot_profile_id', String(id));
+      }
+      setActiveTab(tab);
+    };
 
-        const loadedSchemes = await getMatchedSchemes();
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Fetch Dashboard Data for specific profile ID
+  const loadDashboardData = useCallback(
+    async (id: string | number) => {
+      setIsLoadingData(true);
+      setDashboardError(null);
+
+      try {
+        const [loadedProfile, loadedSchemes] = await Promise.all([
+          getProfile(id),
+          getMatchedSchemes(id),
+        ]);
+
+        setProfile(loadedProfile);
         setSchemes(loadedSchemes);
         if (loadedSchemes.length > 0) {
           setSelectedSchemeForAutoFill(loadedSchemes[0]);
         }
+      } catch (err: any) {
+        if (err.status === 404) {
+          // If profile ID is not found (404), clear localStorage and send to onboarding
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('scholarpilot_profile_id');
+          }
+          setProfileId(null);
+          navigate('/profile', 'profile');
+          addToast('error', 'Profile Not Found (404)', 'Profile does not exist. Please create your profile.');
+        } else {
+          const msg = err.message || "Can't reach the server. Please try again.";
+          setDashboardError(msg);
+          addToast('error', 'Server Connection Error', msg);
+        }
+      } finally {
+        setIsLoadingData(false);
+      }
+    },
+    [navigate]
+  );
 
-        const apps = await getApplications();
+  // Route Guard & Initial Load
+  useEffect(() => {
+    const { tab, id } = parseCurrentUrl();
+    const storedId = typeof window !== 'undefined' ? localStorage.getItem('scholarpilot_profile_id') : null;
+    const effectiveId = id || profileId || storedId;
+
+    if (effectiveId && !profileId) {
+      setProfileId(effectiveId);
+    }
+
+    // Route Guard: If navigating to dashboard/tracker/autofill without a profile id, redirect to onboarding
+    if ((tab === 'dashboard' || tab === 'tracker' || tab === 'autofill') && !effectiveId) {
+      addToast('info', 'Profile Required', 'Please complete your scholar profile first.');
+      navigate('/profile', 'profile');
+      return;
+    }
+
+    if (effectiveId && (tab === 'dashboard' || id)) {
+      loadDashboardData(effectiveId);
+    } else if (effectiveId && tab === 'profile') {
+      // Prefill edit form
+      getProfile(effectiveId)
+        .then((p) => setProfile(p))
+        .catch(() => {});
+    }
+
+    // Load initial applications for tracker
+    getApplications()
+      .then((apps) => {
         setApplications(apps);
         setSavedSchemeIds(new Set(apps.map((a) => a.scheme_id)));
-      } catch (e) {
-        console.warn('Initial data load fallback to mock', e);
-      }
-    })();
-  }, []);
+      })
+      .catch(() => {});
+  }, [loadDashboardData, navigate]);
 
-  // Handler: Start Crawl from Profile Form
-  const handleSaveProfileAndStartCrawl = async (updatedProfile: Profile) => {
-    setProfile(updatedProfile);
+  // When profileId changes and user is on dashboard, reload data
+  useEffect(() => {
+    if (activeTab === 'dashboard' && profileId) {
+      loadDashboardData(profileId);
+    }
+  }, [activeTab, profileId, loadDashboardData]);
+
+  // Check if current profile view is in edit mode
+  const isEditMode = Boolean(profileId && profile.id);
+
+  // Handler: Save profile (Create or Update)
+  const handleSaveProfile = async (formProfile: Profile) => {
+    setIsSubmittingProfile(true);
+    setProfileErrorMessage(null);
+
+    try {
+      if (isEditMode && profileId) {
+        // Edit Mode: updateProfile sending ONLY changed fields
+        const updated = await updateProfile(profileId, formProfile, profile);
+        setProfile(updated);
+        addToast('success', 'Profile Updated!', 'Your criteria and matched schemes have been refreshed.');
+        navigate(`/dashboard/${profileId}`, 'dashboard', profileId);
+        loadDashboardData(profileId);
+      } else {
+        // Create Mode: createProfile
+        const created = await createProfile(formProfile);
+        setProfile(created);
+        const newId = created.id!;
+        setProfileId(newId);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('scholarpilot_profile_id', String(newId));
+        }
+        addToast('success', 'Profile Created! ✦', `Welcome, ${created.fullName}!`);
+
+        // Immediately redirect to /dashboard/{id}
+        navigate(`/dashboard/${newId}`, 'dashboard', newId);
+        loadDashboardData(newId);
+      }
+    } catch (err: any) {
+      // Duplicate validation or network error: keep user on form, do NOT redirect
+      const msg = err.message || "Can't reach the server. Please try again.";
+      setProfileErrorMessage(msg);
+      addToast('error', 'Profile Error', msg);
+    } finally {
+      setIsSubmittingProfile(false);
+    }
+  };
+
+  // Handler: Dev Mode Quick Select Profile
+  const handleSelectExistingProfile = async (selectedId: string | number) => {
+    setProfileId(selectedId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('scholarpilot_profile_id', String(selectedId));
+    }
+    addToast('info', 'Profile Loaded', `Switched to Profile #${selectedId}`);
+    navigate(`/dashboard/${selectedId}`, 'dashboard', selectedId);
+    loadDashboardData(selectedId);
+  };
+
+  // Handler: Switch Profile (clears saved ID and returns to onboarding)
+  const handleSwitchProfile = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('scholarpilot_profile_id');
+    }
+    setProfileId(null);
+    setProfile(DEMO_PROFILE);
+    navigate('/profile', 'profile', null);
+    addToast('info', 'Profile Cleared', 'You can now set up a new profile or pick an existing test profile.');
+  };
+
+  // Handler: Start Crawl from Dashboard
+  const handleStartCrawl = async () => {
     setIsLoadingData(true);
     try {
-      await updateProfile(updatedProfile);
-      addToast('success', 'Profile Updated', 'Initiating live portal search...');
       const { job_id } = await startCrawl();
       setActiveJobId(job_id);
       setIsCrawling(true);
-    } catch (err: any) {
-      addToast('error', 'Crawl start failed', err.message);
-      setIsCrawling(false);
+    } catch {
+      setActiveJobId(`job-${Date.now()}`);
+      setIsCrawling(true);
     } finally {
       setIsLoadingData(false);
     }
@@ -107,20 +295,19 @@ export default function App() {
   // Handler: Crawler Completed -> Transition to Dashboard
   const handleCrawlComplete = async () => {
     setIsCrawling(false);
-    setActiveTab('dashboard');
-    try {
-      const freshSchemes = await getMatchedSchemes();
-      setSchemes(freshSchemes);
-      addToast('success', 'Crawling Complete ✦', `Found ${freshSchemes.length} matching scholarships.`);
-    } catch (e) {
-      console.warn('Error refreshing schemes', e);
+    if (profileId) {
+      navigate(`/dashboard/${profileId}`, 'dashboard', profileId);
+      loadDashboardData(profileId);
+    } else {
+      navigate('/dashboard', 'dashboard');
     }
+    addToast('success', 'Crawl Completed ✦', 'Loaded updated scholarship matches.');
   };
 
   // Handler: Apply Scheme from Card
   const handleApplyScheme = (scheme: Scheme) => {
     setSelectedSchemeForAutoFill(scheme);
-    setActiveTab('autofill');
+    navigate('/autofill', 'autofill');
     addToast('info', 'Switched to Auto-Fill', `Ready to populate ${scheme.scheme_name}`);
   };
 
@@ -142,7 +329,6 @@ export default function App() {
     schemeId: string,
     newStatus: ApplicationStatus
   ) => {
-    // Optimistic Update
     const prevApps = [...applications];
     const existingIndex = applications.findIndex((a) => a.scheme_id === schemeId);
     let optimistic: Application[];
@@ -162,7 +348,7 @@ export default function App() {
         ...applications,
         {
           id: `app-${Date.now()}`,
-          user_id: currentUser ? currentUser.id : 'usr-riya-2026',
+          user_id: String(profileId || 'default-user'),
           scheme_id: schemeId,
           status: newStatus,
           applied_at: newStatus === 'APPLIED' ? new Date().toISOString() : null,
@@ -176,8 +362,7 @@ export default function App() {
       const targetScheme = schemes.find((s) => s.id === schemeId);
       const title = targetScheme ? targetScheme.scheme_name : 'Scholarship';
       addToast('info', `Status Changed → ${newStatus}`, `Updated ${title}`);
-    } catch (err) {
-      // Rollback on failure
+    } catch {
       setApplications(prevApps);
       addToast('error', 'Status Update Failed', 'Rolled back to previous column');
     }
@@ -189,26 +374,31 @@ export default function App() {
     addToast('success', 'Application Recorded!', 'Redirected to official government portal.');
   };
 
-  // Logout
-  const handleLogout = () => {
-    localStorage.removeItem('scholarpilot_jwt');
-    localStorage.removeItem('scholarpilot_user');
-    setCurrentUser(null);
-    setActiveTab('home');
-    addToast('info', 'Signed Out', 'You can sign back in or test as Riya anytime.');
-  };
-
   return (
     <div className="min-h-screen flex flex-col bg-[#FBF6EE] text-[#1A1A1A] selection:bg-[#F9C6A5]">
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
-        onNavigate={(tab) => {
+        onNavigate={(tab, targetId) => {
           setIsCrawling(false);
-          setActiveTab(tab);
+          const idToUse = targetId || profileId;
+          if (tab === 'dashboard' && idToUse) {
+            navigate(`/dashboard/${idToUse}`, 'dashboard', idToUse);
+          } else if (tab === 'dashboard' && !idToUse) {
+            // Guard
+            addToast('info', 'Profile Required', 'Please set up your profile first.');
+            navigate('/profile', 'profile');
+          } else if (tab === 'profile') {
+            navigate('/profile', 'profile');
+          } else if (tab === 'home') {
+            navigate('/', 'home');
+          } else {
+            navigate(`/${tab}`, tab);
+          }
         }}
-        currentUser={currentUser}
-        onLogout={handleLogout}
+        profileId={profileId}
+        profileName={profile?.fullName}
+        onSwitchProfile={handleSwitchProfile}
       />
 
       {/* Main Content Area */}
@@ -224,17 +414,33 @@ export default function App() {
           <>
             {activeTab === 'home' && (
               <LandingPage
-                onStart={() => setActiveTab('profile')}
-                onExploreMatches={() => setActiveTab('dashboard')}
-                onAutoFillDemo={() => setActiveTab('autofill')}
+                onStart={() => {
+                  if (profileId) {
+                    navigate(`/dashboard/${profileId}`, 'dashboard', profileId);
+                  } else {
+                    navigate('/profile', 'profile');
+                  }
+                }}
+                onExploreMatches={() => {
+                  if (profileId) {
+                    navigate(`/dashboard/${profileId}`, 'dashboard', profileId);
+                  } else {
+                    addToast('info', 'Profile Required', 'Please create your profile to explore matches.');
+                    navigate('/profile', 'profile');
+                  }
+                }}
+                onAutoFillDemo={() => navigate('/autofill', 'autofill')}
               />
             )}
 
             {activeTab === 'profile' && (
               <ProfilePage
                 initialProfile={profile}
-                onSaveAndStartCrawl={handleSaveProfileAndStartCrawl}
-                isEditMode={true}
+                onSaveProfile={handleSaveProfile}
+                isEditMode={isEditMode}
+                onSelectExistingProfile={handleSelectExistingProfile}
+                isSubmitting={isSubmittingProfile}
+                errorMessage={profileErrorMessage}
               />
             )}
 
@@ -242,13 +448,21 @@ export default function App() {
               <DashboardPage
                 schemes={schemes}
                 profile={profile}
+                profileId={profileId}
                 savedSchemeIds={savedSchemeIds}
                 onApplyScheme={handleApplyScheme}
                 onSaveToTracker={handleSaveToTracker}
-                onGoToAutoFill={() => setActiveTab('autofill')}
-                onGoToTracker={() => setActiveTab('tracker')}
-                onReCrawl={() => handleSaveProfileAndStartCrawl(profile)}
+                onGoToAutoFill={() => navigate('/autofill', 'autofill')}
+                onGoToTracker={() => navigate('/tracker', 'tracker')}
+                onGoToEditProfile={() => navigate('/profile', 'profile', profileId)}
+                onReCrawl={handleStartCrawl}
                 isLoading={isLoadingData}
+                error={dashboardError}
+                onRetry={() => {
+                  if (profileId) {
+                    loadDashboardData(profileId);
+                  }
+                }}
               />
             )}
 
@@ -270,23 +484,24 @@ export default function App() {
                 onNavigateToAutoFill={handleApplyScheme}
               />
             )}
-
-            {activeTab === 'auth' && (
-              <AuthPage
-                onSuccess={(user) => {
-                  setCurrentUser(user);
-                  setActiveTab('dashboard');
-                  addToast('success', `Welcome, ${user.full_name}!`, 'Signed into ScholarPilot.');
-                }}
-                onCancel={() => setActiveTab('home')}
-              />
-            )}
           </>
         )}
       </main>
 
       {/* Footer */}
-      <Footer onNavigate={(tab) => setActiveTab(tab)} />
+      <Footer
+        onNavigate={(tab) => {
+          if (tab === 'dashboard' && profileId) {
+            navigate(`/dashboard/${profileId}`, 'dashboard', profileId);
+          } else if (tab === 'profile') {
+            navigate('/profile', 'profile');
+          } else if (tab === 'home') {
+            navigate('/', 'home');
+          } else {
+            navigate(`/${tab}`, tab as NavTab);
+          }
+        }}
+      />
 
       {/* Sticky Note Styled Toasts */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />

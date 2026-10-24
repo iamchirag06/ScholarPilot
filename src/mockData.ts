@@ -3,20 +3,20 @@ import { Profile, Scheme, Application, User } from './types/index.ts';
 export const DEMO_USER: User = {
   id: 'usr-riya-2026',
   email: 'riya.sharma@example.edu.in',
-  full_name: 'Riya',
+  fullName: 'Riya',
   token: 'mock-jwt-token-scholarpilot-riya-2026',
 };
 
 export const DEMO_PROFILE: Profile = {
-  user_id: 'usr-riya-2026',
-  full_name: 'Riya',
+  id: 'usr-riya-2026',
+  fullName: 'Riya',
   category: 'SC',
-  annual_income: 200000,
+  annualIncome: 200000,
   state: 'Haryana',
-  course_level: 'UG',
+  courseLevel: 'UG',
   gender: 'FEMALE',
-  is_disabled: false,
-  marks_percentage: 78.0,
+  isDisabled: false,
+  marksPercentage: 78.0,
 };
 
 export const MOCK_SCHEMES: Scheme[] = [
@@ -182,3 +182,18 @@ export function getDeadlineUrgency(deadlineStr: string): {
   }
   return { daysLeft, label: `${daysLeft} days remaining`, color: '#2F8F6B', bg: '#EDF8F3' };
 }
+
+export function formatDisplayName(name?: string | null): string {
+  if (!name || !name.trim()) return '';
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((part) => {
+      if (part.length === 0) return '';
+      const rest = part.slice(1);
+      const formattedRest = part === part.toUpperCase() ? rest.toLowerCase() : rest;
+      return part.charAt(0).toUpperCase() + formattedRest;
+    })
+    .join(' ');
+}
+
