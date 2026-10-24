@@ -18,7 +18,7 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("[boot] .env file not found, relying on environment variables")
+		log.Println("[boot] .env file not found, relying on environment variables")
 	}
 
 	port := getEnv("PORT", "8082")
