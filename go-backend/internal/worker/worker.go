@@ -1,9 +1,11 @@
 package worker
 
 import (
+	"ScholarPilot/internal/dto"
 	"ScholarPilot/internal/queue"
 	"ScholarPilot/internal/tinyfish"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -12,7 +14,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Run is the background consumer loop. Blocks until ctx is cancelled.
 func Run(ctx context.Context, rdb *redis.Client) {
 	log.Println("[worker] started")
 	defer log.Println("[worker] stopped")
@@ -47,7 +48,21 @@ func process(ctx context.Context, rdb *redis.Client, job *queue.Job) {
 
 	goal := job.Goal
 	if goal == "" {
-		goal = "Extract the main content of this page. Return as JSON."
+		goal = `TASK: Extract the scholarship details from this page and return them as JSON.
+	
+Do not include any conversational text. Do not use markdown blocks. Return ONLY valid JSON matching this exact structure:
+{
+    "source_portal": "string",
+    "scheme_name": "string",
+    "provider": "string",
+    "award_amount": 0,
+    "deadline": "YYYY-MM-DD",
+    "apply_link": "string",
+    "raw_eligibility_text": "string",
+    "llm_summary": "string",
+    "required_documents": ["string"],
+    "confidence_score": 0.0
+}`
 	}
 
 	const maxAttempts = 3
@@ -63,7 +78,17 @@ func process(ctx context.Context, rdb *redis.Client, job *queue.Job) {
 
 		res, err := tinyfish.RunCrawl(ctx, job.URL, goal)
 		if err == nil && res.Error == "" {
-			_ = queue.SetResult(ctx, rdb, job.JobID, res.Data)
+			var scholarship dto.Scholarship
+			if err := json.Unmarshal(res.Data, &scholarship); err != nil {
+				lastErr := fmt.Errorf("LLM returned invalid JSON schema: %w", err)
+				log.Printf("[job] %s failed schema validation: %v", job.JobID, lastErr)
+				break
+			}
+
+			scholarship.ID = job.JobID
+			cleanData, _ := json.Marshal(scholarship)
+
+			_ = queue.SetResult(ctx, rdb, job.JobID, cleanData)
 			_ = queue.SetStatus(ctx, rdb, job.JobID, queue.Status{
 				State: "completed", Attempts: attempt,
 			})
