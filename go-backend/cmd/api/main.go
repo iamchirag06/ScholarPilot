@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ScholarPilot/internal/worker"
 	"context"
 	"errors"
 	"log"
@@ -33,6 +34,10 @@ func main() {
 		log.Fatalf("[boot] redis ping failed at %s: %v", redisAddr, err)
 	}
 	log.Printf("[boot] redis connected at %s", redisAddr)
+
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	go worker.Run(workerCtx, rdb)
 
 	srv := &http.Server{
 		Addr:              ":" + port,

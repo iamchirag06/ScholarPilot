@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -28,6 +29,12 @@ type Result struct {
 
 // RunCrawl calls TinyFish and blocks until the COMPLETE event arrives.
 func RunCrawl(ctx context.Context, targetURL, goal string) (*Result, error) {
+	//HACKATHON MOCK MODE: Uncomment to bypass slow network for testing
+	// time.Sleep(3 * time.Second)
+	// return &Result{
+	// 	Status: "COMPLETED",
+	// 	Data:   json.RawMessage(`{"mocked": true, "name": "Bulbasaur", "price": "£63.00"}`),
+	// }, nil
 	apiKey := os.Getenv("TINYFISH_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("TINYFISH_API_KEY not set")
@@ -42,7 +49,7 @@ func RunCrawl(ctx context.Context, targetURL, goal string) (*Result, error) {
 	req.Header.Set("X-API-Key", apiKey)
 	req.Header.Set("Accept", "text/event-stream")
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 360 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("tinyfish request: %w", err)
@@ -67,37 +74,53 @@ func parseSSE(r io.Reader) (*Result, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	var eventType string
-	var dataLines []string
-
 	for scanner.Scan() {
-		line := scanner.Text()
-
+		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
-			if eventType == "COMPLETE" {
-				return handleComplete(dataLines)
+			continue
+		}
+
+		jsonStr := strings.TrimPrefix(line, "data:")
+		jsonStr = strings.TrimSpace(jsonStr)
+
+		if jsonStr == "" || strings.HasPrefix(jsonStr, ":") {
+			continue
+		}
+
+		var event struct {
+			Type   string          `json:"type"`
+			Status string          `json:"status"`
+			Result json.RawMessage `json:"result"`
+			Error  *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+
+		if err := json.Unmarshal([]byte(jsonStr), &event); err != nil {
+			log.Printf("[tinyfish-parse-error] failed to parse: %s", jsonStr)
+			continue
+		}
+
+		if event.Type != "COMPLETE" {
+			continue
+		}
+
+		if event.Status != "COMPLETED" {
+			errMsg := "unknown failure"
+			if event.Error != nil {
+				errMsg = event.Error.Message
 			}
-			eventType = ""
-			dataLines = nil
-			continue
+			return &Result{Status: event.Status, Error: errMsg}, nil
 		}
 
-		if strings.HasPrefix(line, "event:") {
-			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-			continue
-		}
-
-		if strings.HasPrefix(line, "data:") {
-			dataLines = append(dataLines, strings.TrimPrefix(line, "data:"))
-			continue
-		}
+		return &Result{Status: event.Status, Data: event.Result}, nil
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read sse stream: %w", err)
+		return nil, fmt.Errorf("read stream: %w", err)
 	}
 
-	return nil, fmt.Errorf("stream ended before COMPLETE event")
+	return nil, fmt.Errorf("stream ended without COMPLETE event")
 }
 
 func handleComplete(dataLines []string) (*Result, error) {
