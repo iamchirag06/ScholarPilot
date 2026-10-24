@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -79,88 +80,108 @@ Do not include any conversational text. Do not use markdown blocks. Return ONLY 
 ]`
 	}
 
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	completedCount := 0
+
 	for i, targetURL := range job.URLs {
-		progress := int((float64(i) / float64(totalURLs)) * 100)
+		wg.Add(1)
+		go func(index int, url string) {
+			defer wg.Done()
 
-		_ = queue.SetStatus(ctx, rdb, job.JobID, queue.Status{
-			State:    "crawling",
-			Progress: progress,
-			Attempts: 0,
-		})
+			mu.Lock()
+			progress := int((float64(completedCount) / float64(totalURLs)) * 100)
+			_ = queue.SetStatus(ctx, rdb, job.JobID, queue.Status{
+				State:    "crawling",
+				Progress: progress,
+				Attempts: 0,
+			})
+			mu.Unlock()
 
-		log.Printf("[job] %s processing url %d/%d: %s", job.JobID, i+1, totalURLs, targetURL)
+			log.Printf("[job] %s processing url %d/%d: %s", job.JobID, index+1, totalURLs, url)
 
-		const maxAttempts = 3
-		var success bool
+			const maxAttempts = 3
+			var success bool
+			var localScholarships dto.ScholarshipList
 
-		for attempt := 1; attempt <= maxAttempts; attempt++ {
-			if ctx.Err() != nil {
-				return
-			}
+			for attempt := 1; attempt <= maxAttempts; attempt++ {
+				if ctx.Err() != nil {
+					return
+				}
 
-			res, err := tinyfish.RunCrawl(ctx, targetURL, goal)
-			if err == nil && res.Error == "" {
-				var scholarshipList dto.ScholarshipList
-				trimmedData := strings.TrimSpace(string(res.Data))
+				res, err := tinyfish.RunCrawl(ctx, url, goal)
+				if err == nil && res.Error == "" {
+					trimmedData := strings.TrimSpace(string(res.Data))
 
-				if strings.HasPrefix(trimmedData, "{") {
-					var single dto.Scholarship
-					if errSingle := json.Unmarshal(res.Data, &single); errSingle != nil {
-						log.Printf("[job] %s schema error on %s: %v", job.JobID, targetURL, errSingle)
+					if strings.HasPrefix(trimmedData, "{") {
+						var single dto.Scholarship
+						if errSingle := json.Unmarshal(res.Data, &single); errSingle == nil {
+							localScholarships = append(localScholarships, single)
+							success = true
+						}
+					} else {
+						if errArray := json.Unmarshal(res.Data, &localScholarships); errArray == nil {
+							success = true
+						}
+					}
+					if success {
 						break
 					}
-					scholarshipList = append(scholarshipList, single)
+				}
+
+				if err != nil {
+					log.Printf("[job] %s attempt %d failed for %s: %v", job.JobID, attempt, url, err)
 				} else {
-					if errArray := json.Unmarshal(res.Data, &scholarshipList); errArray != nil {
-						log.Printf("[job] %s schema error on %s: %v\nRAW DATA: %s", job.JobID, targetURL, errArray, string(res.Data))
-						break
-					}
+					log.Printf("[job] %s attempt %d tinyfish error for %s: %s", job.JobID, attempt, url, res.Error)
 				}
 
-				for j := range scholarshipList {
-					scholarshipList[j].ID = fmt.Sprintf("%s-%d-%d", job.JobID, i, j)
-					if scholarshipList[j].SourcePortal == "" {
-						scholarshipList[j].SourcePortal = targetURL
-					}
+				backoff := time.Duration(attempt*attempt) * time.Second
+				select {
+				case <-time.After(backoff):
+				case <-ctx.Done():
+					return
 				}
-
-				allScholarships = append(allScholarships, scholarshipList...)
-				success = true
-				break
 			}
 
-			if err != nil {
-				log.Printf("[job] %s attempt %d failed for %s: %v", job.JobID, attempt, targetURL, err)
+			mu.Lock()
+			completedCount++
+
+			if success && len(localScholarships) > 0 {
+				for j := range localScholarships {
+					localScholarships[j].ID = fmt.Sprintf("%s-%d-%d", job.JobID, index, j)
+					if localScholarships[j].SourcePortal == "" {
+						localScholarships[j].SourcePortal = url
+					}
+				}
+				allScholarships = append(allScholarships, localScholarships...)
 			} else {
-				log.Printf("[job] %s attempt %d tinyfish error for %s: %s", job.JobID, attempt, targetURL, res.Error)
+				log.Printf("[job] %s permanently failed or empty on URL: %s", job.JobID, url)
 			}
 
-			backoff := time.Duration(attempt*attempt) * time.Second
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return
-			}
-		}
+			progress = int((float64(completedCount) / float64(totalURLs)) * 100)
+			_ = queue.SetStatus(ctx, rdb, job.JobID, queue.Status{
+				State:    "crawling",
+				Progress: progress,
+				Attempts: 0,
+			})
 
-		if !success {
-			log.Printf("[job] %s permanently failed on URL: %s", job.JobID, targetURL)
-		}
+			mu.Unlock() // Explicit unlock here prevents the deadlock
+
+		}(i, targetURL)
 	}
+
+	wg.Wait()
 
 	cleanData, _ := json.Marshal(allScholarships)
 
-	if err := queue.SetResult(ctx, rdb, job.JobID, cleanData); err != nil {
-		log.Printf("[CRITICAL ERROR] Failed to save result to Redis: %v", err)
-	}
-
-	if err := queue.SetStatus(ctx, rdb, job.JobID, queue.Status{
+	// Using Background context here to ensure it saves even if the request context times out
+	bgCtx := context.Background()
+	_ = queue.SetResult(bgCtx, rdb, job.JobID, cleanData)
+	_ = queue.SetStatus(bgCtx, rdb, job.JobID, queue.Status{
 		State:    "completed",
 		Progress: 100,
 		Attempts: 1,
-	}); err != nil {
-		log.Printf("[CRITICAL ERROR] Failed to save status to Redis: %v", err)
-	}
+	})
 	log.Printf("[job] completed %s - Extracted %d total scholarships across %d URLs", job.JobID, len(allScholarships), totalURLs)
 
 	go func() {
@@ -184,7 +205,7 @@ Do not include any conversational text. Do not use markdown blocks. Return ONLY 
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("ngrok-skip-browser-warning", "true")
 
-		client := &http.Client{Timeout: 10 * time.Second}
+		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Printf("[callback] failed to notify Java: %v", err)
