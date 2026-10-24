@@ -1,5 +1,5 @@
 import { Scheme } from '../types/index.ts';
-import { apiFetch, isMockMode } from './api.ts';
+import { apiFetch, isMockMode, getStoredUserId } from './api.ts';
 import { MOCK_SCHEMES } from '../mockData.ts';
 
 /**
@@ -80,16 +80,80 @@ export function normalizeScheme(raw: any): Scheme {
 }
 
 /**
- * 5. getMatchedSchemes(id) -> GET /api/schemes/matched/{id}
- * Returns ranked schemes for that user.
+ * 7. Get Matched Schemes (Dashboard) -> GET /api/schemes/matched/{userId}
+ * What to send: The userId in the URL.
+ * What it returns: An array of eligible schemes, already sorted by AI rank (highest priority first). Render these as cards.
  */
-export async function getMatchedSchemes(id: string | number): Promise<Scheme[]> {
+export async function getMatchedSchemes(userIdParam?: string | number): Promise<Scheme[]> {
+  const userId = userIdParam || getStoredUserId();
+
   if (isMockMode()) {
     await new Promise((res) => setTimeout(res, 400));
     return MOCK_SCHEMES;
   }
 
-  const rawList = await apiFetch<any[]>(`/api/schemes/matched/${id}`);
-  if (!Array.isArray(rawList)) return [];
-  return rawList.map(normalizeScheme);
+  if (!userId) {
+    console.warn('getMatchedSchemes called without userId');
+    return MOCK_SCHEMES;
+  }
+
+  try {
+    const rawList = await apiFetch<any[]>(`/api/schemes/matched/${userId}`);
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map(normalizeScheme);
+  } catch (err) {
+    console.warn('Failed to load matched schemes, falling back to mock schemes', err);
+    return MOCK_SCHEMES;
+  }
+}
+
+/**
+ * 8. Get All Schemes -> GET /api/schemes/all
+ * What to send: Nothing.
+ * What it returns: An array of all schemes in the database.
+ */
+export async function getAllSchemes(): Promise<Scheme[]> {
+  if (isMockMode()) {
+    await new Promise((res) => setTimeout(res, 300));
+    return MOCK_SCHEMES;
+  }
+
+  try {
+    const rawList = await apiFetch<any[]>('/api/schemes/all');
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map(normalizeScheme);
+  } catch (err) {
+    console.warn('Failed to load all schemes from backend, falling back to mock schemes', err);
+    return MOCK_SCHEMES;
+  }
+}
+
+/**
+ * 9. Auto-Fill Form Data (The "Apply" Button) -> GET /api/schemes/{schemeId}/auto-fill/{profileId}
+ * What to send: The schemeId and profileId (Note: This uses the Profile ID, not the User ID) in the URL.
+ * What it returns: A JSON object with pre-filled form fields (e.g., "Full Name": "Arjun", "Annual Income": 200000). Map these exact keys to your React input fields.
+ */
+export async function getAutoFillData(
+  schemeId: string,
+  profileId: string | number
+): Promise<Record<string, any>> {
+  if (isMockMode()) {
+    await new Promise((res) => setTimeout(res, 200));
+    return {
+      'Full Name': 'Student',
+      'Gender': 'Female',
+      'Category': 'GENERAL',
+      'Annual Income': 200000,
+      'State': 'Delhi',
+      'Course Level': 'UG',
+      'Marks Percentage': 85,
+    };
+  }
+
+  try {
+    return await apiFetch<Record<string, any>>(`/api/schemes/${schemeId}/auto-fill/${profileId}`);
+  } catch (err) {
+    console.warn('Failed to fetch auto-fill payload from backend, fallback to client-side mapping', err);
+    return {};
+  }
 }

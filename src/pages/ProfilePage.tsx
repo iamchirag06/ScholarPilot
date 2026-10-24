@@ -1,62 +1,86 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Profile, Category, CourseLevel, Gender } from '../types/index.ts';
-import { INDIAN_STATES, formatINRWords, DEMO_PROFILE } from '../mockData.ts';
-import { getAllProfiles } from '../services/profiles.ts';
+import { INDIAN_STATES, formatINRWords, getStoredUsername, formatDisplayName } from '../mockData.ts';
 import { Button } from '../components/ui/Button.tsx';
 import { StickyNote } from '../components/decorative/StickyNote.tsx';
-import { Scribble } from '../components/decorative/Scribble.tsx';
 import { CatIllustration } from '../components/illustrations/Illustrations.tsx';
 import {
   Check,
   ArrowLeft,
-  ArrowRight,
   Sparkles,
   User,
   GraduationCap,
   IndianRupee,
-  RefreshCw,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 interface ProfilePageProps {
   initialProfile: Profile;
   onSaveProfile: (profile: Profile) => Promise<void> | void;
   isEditMode?: boolean;
-  onSelectExistingProfile?: (profileId: string | number) => void;
   isSubmitting?: boolean;
   errorMessage?: string | null;
+  username?: string | null;
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({
   initialProfile,
   onSaveProfile,
   isEditMode = false,
-  onSelectExistingProfile,
   isSubmitting = false,
   errorMessage = null,
+  username = null,
 }) => {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [profile, setProfile] = useState<Profile>(initialProfile);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [existingProfiles, setExistingProfiles] = useState<Profile[]>([]);
-  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
-
-  const isDev = Boolean((import.meta as any).env?.DEV);
-
-  useEffect(() => {
-    setProfile(initialProfile);
-  }, [initialProfile]);
-
-  // Dev-only: load existing profiles for quick picker
-  useEffect(() => {
-    if (isDev && !isEditMode) {
-      setIsLoadingExisting(true);
-      getAllProfiles()
-        .then((list) => setExistingProfiles(list))
-        .catch(() => {})
-        .finally(() => setIsLoadingExisting(false));
+  // Helper to determine the effective full name: username from props/localStorage > non-riya initial name > ''
+  const resolveFullName = (incoming: Profile): string => {
+    const rawUsername = username || getStoredUsername();
+    if (rawUsername && rawUsername.trim()) {
+      return formatDisplayName(rawUsername);
     }
-  }, [isDev, isEditMode]);
+    if (
+      incoming.fullName &&
+      incoming.fullName.trim() &&
+      incoming.fullName.trim().toLowerCase() !== 'riya'
+    ) {
+      return incoming.fullName.trim();
+    }
+    return '';
+  };
+
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [profile, setProfile] = useState<Profile>(() => ({
+    ...initialProfile,
+    fullName: resolveFullName(initialProfile),
+    annualIncome: initialProfile.annualIncome ?? 0,
+    marksPercentage: initialProfile.marksPercentage ?? 75,
+    isDisabled: Boolean(initialProfile.isDisabled),
+    state: initialProfile.state || 'Haryana',
+    courseLevel: initialProfile.courseLevel || 'UG',
+    category: initialProfile.category || 'GENERAL',
+    gender: initialProfile.gender || 'MALE',
+  }));
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setProfile((prev) => ({
+      ...initialProfile,
+      fullName: prev.fullName || resolveFullName(initialProfile),
+      annualIncome: initialProfile.annualIncome ?? prev.annualIncome ?? 0,
+      marksPercentage: initialProfile.marksPercentage ?? prev.marksPercentage ?? 75,
+      isDisabled: Boolean(initialProfile.isDisabled ?? prev.isDisabled),
+      state: initialProfile.state || prev.state || 'Haryana',
+      courseLevel: initialProfile.courseLevel || prev.courseLevel || 'UG',
+      category: initialProfile.category || prev.category || 'GENERAL',
+      gender: initialProfile.gender || prev.gender || 'MALE',
+    }));
+  }, [initialProfile, username]);
+
+  const userGreetingName = useMemo(() => {
+    const raw = profile.fullName || username || getStoredUsername();
+    if (!raw || raw.trim().toLowerCase() === 'riya') return '';
+    return formatDisplayName(raw);
+  }, [profile.fullName, username]);
 
   // Step Tips
   const stepTips: Record<number, { text: string; color: 'yellow' | 'pink' | 'mint' | 'peach' }> = {
@@ -76,6 +100,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
       text: 'Looking sharp! Submit to rank all live matching schemes against government criteria.',
       color: 'peach',
     },
+  };
+
+  const currentTip = stepTips[step] || stepTips[4] || {
+    text: 'Review your details to rank matching scholarship schemes.',
+    color: 'peach',
   };
 
   const validateStep = (currentStep: number): boolean => {
@@ -160,11 +189,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
     const cleanedProfile: Profile = {
       ...profile,
-      fullName: profile.fullName.trim(),
-      annualIncome: Math.round(Math.max(0, Number(profile.annualIncome))),
-      marksPercentage: parseFloat(Number(profile.marksPercentage).toFixed(2)),
+      fullName: (profile.fullName || userGreetingName || '').trim(),
+      annualIncome: Math.round(Math.max(0, Number(profile.annualIncome) || 0)),
+      marksPercentage: parseFloat((Number(profile.marksPercentage) || 0).toFixed(2)),
       isDisabled: Boolean(profile.isDisabled),
     };
+
+    if (cleanedProfile.fullName && typeof window !== 'undefined') {
+      localStorage.setItem('scholarpilot_username', cleanedProfile.fullName);
+    }
 
     onSaveProfile(cleanedProfile);
   };
@@ -174,7 +207,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
       {/* Title & Eyebrow */}
       <div className="text-center mb-8">
         <span className="font-script text-2xl text-[#E8622C] font-bold block mb-1">
-          {isEditMode ? 'Update Your Preferences ✦' : 'Your Eligibility Passport ✦'}
+          {userGreetingName
+            ? `Welcome, ${userGreetingName} ✦`
+            : isEditMode
+            ? 'Update Your Preferences ✦'
+            : 'Your Eligibility Passport ✦'}
         </span>
         <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl font-bold text-[#1A1A1A] tracking-tight">
           {isEditMode ? 'Edit Scholar Profile' : 'Set Up Your Scholar Profile'}
@@ -185,41 +222,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             : 'Fill in your academic and background details once. TinyFish will match 500+ government and private schemes.'}
         </p>
       </div>
-
-      {/* Dev-Only: Select Existing Profile Dropdown */}
-      {isDev && !isEditMode && onSelectExistingProfile && existingProfiles.length > 0 && (
-        <div className="mb-8 p-4 rounded-2xl bg-[#EDF8F3] border border-[#2F8F6B]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-[#1F5A45] flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#2F8F6B]" />
-              Dev Mode: Select Existing Profile for Testing
-            </span>
-            <p className="text-xs text-[#5E5A52] mt-0.5">
-              Jump straight to any existing backend profile without creating a new one:
-            </p>
-          </div>
-          <select
-            defaultValue=""
-            disabled={isLoadingExisting || isSubmitting}
-            onChange={(e) => {
-              const selectedId = e.target.value;
-              if (selectedId) {
-                onSelectExistingProfile(selectedId);
-              }
-            }}
-            className="text-xs font-semibold px-3 py-2 rounded-xl bg-[#FFFDF8] border border-[#2F8F6B]/40 text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#1F5A45] cursor-pointer"
-          >
-            <option value="" disabled>
-              Select existing profile...
-            </option>
-            {existingProfiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.fullName} (ID: {p.id} · {p.state} · {p.category})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       {/* Top Banner Error (e.g. Duplicate Profile Validation from Backend) */}
       {errorMessage && (
@@ -291,11 +293,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   <input
                     type="text"
                     required
-                    value={profile.fullName}
+                    value={profile.fullName || ''}
                     onChange={(e) =>
                       setProfile({ ...profile, fullName: e.target.value })
                     }
-                    placeholder="e.g. Abhi Sharma"
+                    placeholder={userGreetingName ? `e.g. ${userGreetingName}` : 'e.g. Abhi Sharma'}
                     className="w-full px-4 py-3 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] text-base focus:outline-none focus:ring-2 focus:ring-[#1F5A45] focus:bg-[#FFFDF8] transition-all"
                   />
                   {errors.fullName && (
@@ -484,6 +486,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                       );
                     })}
                   </div>
+                  {errors.category && (
+                    <p className="mt-1 text-xs text-[#D64545] font-medium">{errors.category}</p>
+                  )}
                 </div>
 
                 <div>
@@ -534,7 +539,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         Full Name
                       </span>
                       <span className="font-serif text-lg font-bold text-[#1A1A1A]">
-                        {profile.fullName || '—'}
+                        {profile.fullName || userGreetingName || '—'}
                       </span>
                     </div>
 
@@ -543,7 +548,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         State Domicile
                       </span>
                       <span className="font-serif text-lg font-bold text-[#1A1A1A]">
-                        {profile.state}
+                        {profile.state || '—'}
                       </span>
                     </div>
 
@@ -552,7 +557,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         Course Level
                       </span>
                       <span className="font-serif text-lg font-bold text-[#1A1A1A]">
-                        {profile.courseLevel}
+                        {profile.courseLevel || '—'}
                       </span>
                     </div>
 
@@ -561,7 +566,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         Marks Percentage
                       </span>
                       <span className="font-serif text-lg font-bold text-[#1F5A45]">
-                        {profile.marksPercentage}%
+                        {profile.marksPercentage ?? 0}%
                       </span>
                     </div>
 
@@ -570,7 +575,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         Category
                       </span>
                       <span className="font-serif text-lg font-bold text-[#E8622C]">
-                        {profile.category}
+                        {profile.category || 'GENERAL'}
                       </span>
                     </div>
 
@@ -632,10 +637,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   className="bg-[#1A1A1A] text-white shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
-                    <>
+                    <span className="inline-flex items-center">
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                       Saving Profile...
-                    </>
+                    </span>
                   ) : isEditMode ? (
                     'Update Profile & View Matches'
                   ) : (
@@ -651,44 +656,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         <div className="lg:col-span-4 flex flex-col items-center gap-6">
           <div className="w-full">
             <StickyNote
-              color={stepTips[step].color}
+              color={currentTip.color}
               rotation={step % 2 === 0 ? 3 : -3}
               tape
               author="ScholarPilot Advisor"
             >
-              {stepTips[step].text}
+              {currentTip.text}
             </StickyNote>
-          </div>
-
-          {/* Quick preset button for demo convenience */}
-          <div className="w-full p-4 rounded-xl bg-[#FFFDF8] border border-[#E9E1D3] text-center shadow-xs">
-            <span className="font-script text-base text-[#E8622C] font-bold block mb-1">
-              Demo Persona Shortcut
-            </span>
-            <p className="text-xs text-[#5E5A52] mb-3">
-              Load test persona: Riya (SC, Haryana, UG, ₹2 Lakh income).
-            </p>
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => {
-                setProfile({
-                  id: DEMO_PROFILE.id,
-                  fullName: 'Riya',
-                  category: 'SC',
-                  annualIncome: 200000,
-                  state: 'Haryana',
-                  courseLevel: 'UG',
-                  gender: 'FEMALE',
-                  isDisabled: false,
-                  marksPercentage: 78.0,
-                });
-                setStep(4);
-              }}
-              className="text-xs font-semibold text-[#1F5A45] hover:text-[#E8622C] underline cursor-pointer"
-            >
-              Load Riya's Pre-agreed Profile ✦
-            </button>
           </div>
 
           <div className="pt-2">

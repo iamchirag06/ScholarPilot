@@ -50,7 +50,7 @@ export const Button: React.FC<ButtonProps> = ({
   return (
     <button
       disabled={disabled}
-      className={`inline-flex items-center justify-center select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+      className={`inline-flex items-center justify-center whitespace-nowrap select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
         sizeClasses[size]
       } ${variantClasses[variant]} ${className}`}
       {...props}

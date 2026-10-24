@@ -64,6 +64,14 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </li>
               <li>
                 <button
+                  onClick={() => onNavigate?.('chat')}
+                  className="hover:text-white transition-colors cursor-pointer"
+                >
+                  AI Advisor (Chatbot)
+                </button>
+              </li>
+              <li>
+                <button
                   onClick={() => onNavigate?.('autofill')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >

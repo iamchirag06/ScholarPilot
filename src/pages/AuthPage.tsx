@@ -39,17 +39,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, onCancel }) => {
     }
   };
 
-  const handleAutoLoginRiya = async () => {
-    setIsLoading(true);
-    try {
-      const user = await login('riya.sharma@example.edu.in', 'password123');
-      onSuccess(user);
-    } catch (err: any) {
-      setError(err.message || 'Auto-login failed');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="py-12 sm:py-20 px-4 sm:px-6 lg:px-8 max-w-lg mx-auto">
@@ -140,27 +129,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, onCancel }) => {
               className="w-full bg-[#1A1A1A] text-white shadow-md cursor-pointer"
             >
               {isLoading
-                ? 'Signing in...'
+                ? 'Please wait...'
                 : isRegister
-                ? 'Create Account'
-                : 'Sign In to Dashboard'}
+                ? 'Create Account & Continue'
+                : 'Sign In & Continue'}
             </Button>
           </div>
         </form>
 
-        {/* Demo Fast Login as Riya */}
-        <div className="mt-6 pt-6 border-t border-[#E9E1D3] text-center">
-          <button
-            type="button"
-            onClick={handleAutoLoginRiya}
-            className="w-full py-2.5 px-4 rounded-lg bg-[#F8E4E0] hover:bg-[#F3DE9A] transition-colors border border-[#E8622C]/30 text-xs font-bold text-[#1A1A1A] flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-          >
-            <Sparkles className="w-4 h-4 text-[#E8622C]" />
-            <span>Instant Demo Sign-in as "Riya" (SC, Haryana)</span>
-          </button>
-        </div>
-
-        <div className="mt-4 text-center">
+        <div className="mt-6 pt-4 border-t border-[#E9E1D3] flex flex-col items-center gap-2">
           <button
             type="button"
             onClick={() => {
@@ -173,6 +150,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, onCancel }) => {
               ? 'Already have an account? Sign In'
               : "Don't have an account yet? Register here"}
           </button>
+
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="text-xs text-[#5E5A52]/80 hover:text-[#E8622C] cursor-pointer mt-1"
+            >
+              ← Back to Home
+            </button>
+          )}
         </div>
       </div>
 

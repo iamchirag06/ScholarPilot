@@ -116,7 +116,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               onClick={onGoToEditProfile}
               className="bg-[#FFFDF8]"
             >
-              <Edit3 className="w-4 h-4 mr-1.5" />
+              <Edit3 className="inline w-4 h-4 mr-1.5" />
               Edit Profile
             </Button>
           )}
@@ -127,7 +127,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             onClick={onReCrawl}
             className="bg-[#FFFDF8]"
           >
-            <RefreshCw className="w-4 h-4 mr-1.5" />
+            <RefreshCw className="inline w-4 h-4 mr-1.5" />
             Re-crawl Portals
           </Button>
 

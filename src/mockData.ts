@@ -140,24 +140,69 @@ export const INDIAN_STATES: string[] = [
   'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
 ];
 
-export function formatINR(val: number): string {
+export function formatINR(val?: number | null): string {
+  if (val === undefined || val === null || isNaN(val)) return '₹0';
   return '₹' + new Intl.NumberFormat('en-IN').format(val);
 }
 
-export function formatINRWords(val: number): string {
-  if (val >= 10000000) {
-    const cr = (val / 10000000).toFixed(1).replace(/\.0$/, '');
-    return `${formatINR(val)} · ${cr} Crore`;
+export function formatINRWords(val?: number | null): string {
+  const num = typeof val === 'number' && !isNaN(val) ? val : 0;
+  if (num >= 10000000) {
+    const cr = (num / 10000000).toFixed(1).replace(/\.0$/, '');
+    return `${formatINR(num)} · ${cr} Crore`;
   }
-  if (val >= 100000) {
-    const lk = (val / 100000).toFixed(1).replace(/\.0$/, '');
-    return `${formatINR(val)} · ${lk} Lakh`;
+  if (num >= 100000) {
+    const lk = (num / 100000).toFixed(1).replace(/\.0$/, '');
+    return `${formatINR(num)} · ${lk} Lakh`;
   }
-  if (val >= 1000) {
-    const th = (val / 1000).toFixed(1).replace(/\.0$/, '');
-    return `${formatINR(val)} · ${th} Thousand`;
+  if (num >= 1000) {
+    const th = (num / 1000).toFixed(1).replace(/\.0$/, '');
+    return `${formatINR(num)} · ${th} Thousand`;
   }
-  return formatINR(val);
+  return formatINR(num);
+}
+
+export function getStoredUsername(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const directKeys = [
+      'scholarpilot_username',
+      'username',
+      'user_name',
+      'name',
+      'fullName',
+    ];
+    for (const key of directKeys) {
+      const val = localStorage.getItem(key);
+      if (val && typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== 'riya') {
+        return val.trim();
+      }
+    }
+
+    const objKeys = ['user', 'scholarpilot_user', 'currentUser', 'auth'];
+    for (const key of objKeys) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const found =
+            parsed.username ||
+            parsed.fullName ||
+            parsed.full_name ||
+            parsed.name ||
+            parsed.email;
+          if (found && typeof found === 'string' && found.trim() && found.trim().toLowerCase() !== 'riya') {
+            return found.trim();
+          }
+        } catch {
+          if (raw.trim() && raw.trim().toLowerCase() !== 'riya') {
+            return raw.trim();
+          }
+        }
+      }
+    }
+  } catch {}
+  return '';
 }
 
 export function getDeadlineUrgency(deadlineStr: string): {

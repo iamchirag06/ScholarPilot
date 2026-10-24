@@ -436,7 +436,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               size="lg"
               onClick={onAutoFillDemo}
             >
-              Try Auto-Fill Demo ✨
+              Try Auto-Fill Demo 
             </Button>
           </div>
         </div>

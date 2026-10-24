@@ -2,13 +2,14 @@ import React from 'react';
 import { Button } from '../ui/Button.tsx';
 import { RefreshCw, User, Sparkles } from 'lucide-react';
 
-export type NavTab = 'home' | 'dashboard' | 'profile' | 'autofill' | 'tracker';
+export type NavTab = 'home' | 'dashboard' | 'profile' | 'autofill' | 'tracker' | 'auth' | 'chat';
 
 interface NavbarProps {
   activeTab: NavTab;
   onNavigate: (tab: NavTab, profileId?: string | number) => void;
   profileId: string | number | null;
   profileName?: string | null;
+  isAuthenticated?: boolean;
   onSwitchProfile: () => void;
 }
 
@@ -17,12 +18,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigate,
   profileId,
   profileName,
+  isAuthenticated = false,
   onSwitchProfile,
 }) => {
   const navItems: Array<{ id: NavTab; label: string }> = [
     { id: 'home', label: 'Home' },
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'profile', label: profileId ? 'Profile' : 'Get Started' },
+    { id: 'chat', label: 'Chatbot' },
+    { id: 'profile', label: profileId ? 'Profile' : isAuthenticated ? 'Setup Profile' : 'Get Started' },
     { id: 'autofill', label: 'Auto-Fill' },
     { id: 'tracker', label: 'Tracker' },
   ];
@@ -80,11 +83,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <button
                 onClick={onSwitchProfile}
-                title="Switch Profile / Create New"
+                title="Switch Profile / Sign Out"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#5E5A52] hover:text-[#E8622C] hover:bg-[#F8E4E0] transition-colors cursor-pointer border border-[#E9E1D3] bg-[#FFFDF8]"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Switch Profile</span>
+                <span className="hidden lg:inline">Switch Account</span>
               </button>
 
               <Button
@@ -97,13 +100,47 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Find Schemes
               </Button>
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
+          ) : isAuthenticated ? (
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFFDF8] border border-[#E9E1D3] text-xs font-semibold text-[#1A1A1A]">
+                <span className="w-2 h-2 rounded-full bg-[#2F8F6B]" />
+                <span className="truncate max-w-[120px]">{profileName || 'Scholar'}</span>
+              </span>
+
+              <button
+                onClick={onSwitchProfile}
+                title="Sign Out"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#5E5A52] hover:text-[#D64545] hover:bg-[#FDECEB] transition-colors cursor-pointer border border-[#E9E1D3] bg-[#FFFDF8]"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">Sign Out</span>
+              </button>
+
               <Button
                 variant="primary"
                 size="sm"
                 showArrow
                 onClick={() => onNavigate('profile')}
+                className="whitespace-nowrap shrink-0"
+              >
+                Setup Profile
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onNavigate('auth')}
+                className="hidden sm:inline-flex text-[#1A1A1A] hover:bg-[#F8E4E0]"
+              >
+                Sign In
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                showArrow
+                onClick={() => onNavigate('auth')}
                 className="whitespace-nowrap shrink-0"
               >
                 Get Started

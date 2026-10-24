@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Scheme, Profile } from '../types/index.ts';
 import { StickyNote } from '../components/decorative/StickyNote.tsx';
-import { HandUnderline } from '../components/decorative/HandUnderline.tsx';
 import { Button } from '../components/ui/Button.tsx';
 import { formatINR } from '../mockData.ts';
+import { getAutoFillData } from '../services/schemes.ts';
 import {
   Sparkles,
   CheckCircle2,
@@ -44,71 +44,116 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
   const [isCompleted, setIsCompleted] = useState(false);
   const [autoFilledCount, setAutoFilledCount] = useState(0);
 
-  // Initialize fields based on current profile and scheme
+  // Initialize and load pre-filled fields from backend auto-fill endpoint
   useEffect(() => {
-    const initialFields: FormFieldState[] = [
-      {
-        key: 'fullName',
-        label: 'Applicant Full Name',
-        targetValue: profile.fullName,
-        currentValue: '',
-        isHighlighting: false,
-        isFilled: false,
-      },
-      {
-        key: 'gender',
-        label: 'Gender',
-        targetValue: profile.gender === 'FEMALE' ? 'Female' : profile.gender,
-        currentValue: '',
-        isHighlighting: false,
-        isFilled: false,
-      },
-      {
-        key: 'category',
-        label: 'Social Reservation Category',
-        targetValue: profile.category,
-        currentValue: '',
-        isHighlighting: false,
-        isFilled: false,
-      },
-      {
-        key: 'state',
-        label: 'State / Union Territory of Domicile',
-        targetValue: profile.state,
-        currentValue: '',
-        isHighlighting: false,
-        isFilled: false,
-      },
-      {
-        key: 'courseLevel',
-        label: 'Current Academic Degree Level',
-        targetValue:
-          profile.courseLevel === 'UG'
-            ? 'Undergraduate (UG Degree)'
-            : profile.courseLevel,
-        currentValue: '',
-        isHighlighting: false,
-        isFilled: false,
-      },
-      {
-        key: 'marksPercentage',
-        label: 'Previous Qualifying Exam Marks (%)',
-        targetValue: `${profile.marksPercentage}%`,
-        currentValue: '',
-        isHighlighting: false,
-        isFilled: false,
-      },
-      {
-        key: 'annualIncome',
-        label: 'Verified Gross Family Annual Income',
-        targetValue: formatINR(profile.annualIncome),
-        currentValue: '',
-        isHighlighting: false,
-        isFilled: false,
-      },
-    ];
+    let isCancelled = false;
 
-    setFields(initialFields);
+    async function loadFormFields() {
+      // Default profile-derived fields for instant rendering and resilient fallback
+      const defaultFields: FormFieldState[] = [
+        {
+          key: 'fullName',
+          label: 'Applicant Full Name',
+          targetValue: profile.fullName || 'Student',
+          currentValue: '',
+          isHighlighting: false,
+          isFilled: false,
+        },
+        {
+          key: 'gender',
+          label: 'Gender',
+          targetValue:
+            profile.gender === 'FEMALE'
+              ? 'Female'
+              : profile.gender === 'MALE'
+              ? 'Male'
+              : profile.gender || 'Other',
+          currentValue: '',
+          isHighlighting: false,
+          isFilled: false,
+        },
+        {
+          key: 'category',
+          label: 'Social Reservation Category',
+          targetValue: profile.category || 'GENERAL',
+          currentValue: '',
+          isHighlighting: false,
+          isFilled: false,
+        },
+        {
+          key: 'state',
+          label: 'State / Union Territory of Domicile',
+          targetValue: profile.state || 'Delhi',
+          currentValue: '',
+          isHighlighting: false,
+          isFilled: false,
+        },
+        {
+          key: 'courseLevel',
+          label: 'Current Academic Degree Level',
+          targetValue:
+            profile.courseLevel === 'UG'
+              ? 'Undergraduate (UG Degree)'
+              : profile.courseLevel || 'UG',
+          currentValue: '',
+          isHighlighting: false,
+          isFilled: false,
+        },
+        {
+          key: 'marksPercentage',
+          label: 'Previous Qualifying Exam Marks (%)',
+          targetValue: `${profile.marksPercentage || 80}%`,
+          currentValue: '',
+          isHighlighting: false,
+          isFilled: false,
+        },
+        {
+          key: 'annualIncome',
+          label: 'Verified Gross Family Annual Income',
+          targetValue: formatINR(profile.annualIncome || 200000),
+          currentValue: '',
+          isHighlighting: false,
+          isFilled: false,
+        },
+      ];
+
+      // Route 9: GET /api/schemes/{schemeId}/auto-fill/{profileId}
+      if (scheme.id && profile.id) {
+        try {
+          const autoFillJson = await getAutoFillData(scheme.id, profile.id);
+          if (!isCancelled && autoFillJson && Object.keys(autoFillJson).length > 0) {
+            // Map exact backend keys to React input fields
+            const backendFields: FormFieldState[] = Object.entries(autoFillJson).map(([key, value]) => {
+              let displayVal = String(value ?? '');
+              if (typeof value === 'number' && key.toLowerCase().includes('income')) {
+                displayVal = formatINR(value);
+              } else if (typeof value === 'number' && key.toLowerCase().includes('mark')) {
+                displayVal = `${value}%`;
+              }
+              return {
+                key,
+                label: key,
+                targetValue: displayVal,
+                currentValue: '',
+                isHighlighting: false,
+                isFilled: false,
+              };
+            });
+            setFields(backendFields);
+            return;
+          }
+        } catch (err) {
+          console.warn('Auto-fill API load warning, using standard profile attributes', err);
+        }
+      }
+
+      if (!isCancelled) {
+        setFields(defaultFields);
+      }
+    }
+
+    loadFormFields();
+
     const initialDocs: Record<string, boolean> = {};
     (scheme.required_documents || []).forEach((d) => {
       initialDocs[d] = false;
@@ -116,6 +161,10 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
     setDocStatuses(initialDocs);
     setIsCompleted(false);
     setAutoFilledCount(0);
+
+    return () => {
+      isCancelled = true;
+    };
   }, [scheme, profile]);
 
   // Magical Sequential Auto-Fill Animation
@@ -135,7 +184,7 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
     );
 
     const initialDocs: Record<string, boolean> = {};
-    scheme.required_documents.forEach((d) => {
+    (scheme.required_documents || []).forEach((d) => {
       initialDocs[d] = false;
     });
     setDocStatuses(initialDocs);
@@ -178,11 +227,11 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
 
         currentStep++;
       } else {
-        // Now fill documents one by one
+        // Fill documents one by one
         clearInterval(interval);
 
         let docIndex = 0;
-        const docs = scheme.required_documents;
+        const docs = scheme.required_documents || [];
         const docInterval = setInterval(() => {
           if (docIndex < docs.length) {
             const docName = docs[docIndex];
@@ -195,12 +244,14 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
           }
         }, 200);
       }
-    }, 220); // 150-250ms cadence
+    }, 220);
   };
 
   const handleSubmit = () => {
     onSubmitApplication(scheme.id);
-    window.open(scheme.apply_link, '_blank', 'noopener,noreferrer');
+    if (scheme.apply_link && scheme.apply_link !== '#') {
+      window.open(scheme.apply_link, '_blank', 'noopener,noreferrer');
+    }
   };
 
   return (
@@ -286,9 +337,8 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
                 size="md"
                 onClick={startAutoFill}
                 disabled={isAnimating}
-                className="w-full sm:w-auto bg-[#E8622C] hover:bg-[#D55320] text-white shadow-md cursor-pointer"
+                className="w-full sm:w-auto bg-[#E8622C] hover:bg-[#D55320] text-white shadow-md cursor-pointer whitespace-nowrap"
               >
-                <Sparkles className="w-4 h-4 mr-1.5" />
                 <span>{isAnimating ? 'Auto-filling fields...' : 'Auto-Fill with My Profile'}</span>
               </Button>
             </div>
@@ -346,7 +396,7 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {scheme.required_documents.map((doc) => {
+              {(scheme.required_documents || []).map((doc) => {
                 const isReady = docStatuses[doc];
                 return (
                   <div
@@ -382,27 +432,28 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
               <Button
                 variant="secondary"
                 size="md"
                 onClick={startAutoFill}
                 disabled={isAnimating}
+                className="whitespace-nowrap shrink-0"
               >
-                <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                <RefreshCw className="inline w-3.5 h-3.5 mr-1" />
                 Re-run Fill
               </Button>
 
               <Button
                 variant="primary"
-                size="lg"
+                size="md"
                 onClick={handleSubmit}
                 showArrow
-                className="bg-[#1A1A1A] text-white shadow-md"
+                className="bg-[#1A1A1A] text-white shadow-md whitespace-nowrap shrink-0"
               >
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5 whitespace-nowrap">
                   <span>Submit / Go to Official Portal</span>
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-4 h-4 shrink-0" />
                 </span>
               </Button>
             </div>

@@ -1,5 +1,5 @@
 import { Profile } from '../types/index.ts';
-import { apiFetch, isMockMode, ApiError } from './api.ts';
+import { apiFetch, isMockMode, ApiError, getStoredUserId } from './api.ts';
 import { DEMO_PROFILE } from '../mockData.ts';
 
 // In-memory / localStorage cache for mock fallback
@@ -27,7 +27,7 @@ const saveMockProfiles = (profiles: Profile[]) => {
 export function normalizeProfile(raw: any): Profile {
   if (!raw) return DEMO_PROFILE;
   return {
-    id: raw.id ?? raw.user_id ?? raw._id,
+    id: raw.id ?? raw.profileId ?? raw._id,
     fullName: raw.fullName ?? raw.full_name ?? '',
     category: raw.category ?? 'GENERAL',
     annualIncome: typeof raw.annualIncome === 'number' ? raw.annualIncome : Number(raw.annual_income ?? 0),
@@ -40,13 +40,22 @@ export function normalizeProfile(raw: any): Profile {
 }
 
 /**
- * 1. createProfile(data) -> POST /api/profiles/create
- * Body: fullName, category, annualIncome, state, courseLevel, gender, isDisabled, marksPercentage
- * Returns saved profile including id.
- * Saves id to localStorage ('scholarpilot_profile_id').
+ * 3. Create Profile (Submit Form) -> POST /api/profiles/create
+ * What to send: JSON with userId (from login), fullName, category, annualIncome, state, courseLevel, gender, isDisabled, marksPercentage.
+ * What it returns: The saved profile object. (If you send a duplicate name+state or forget the userId, it returns a 400 Bad Request).
  */
-export async function createProfile(data: Omit<Profile, 'id'>): Promise<Profile> {
-  const payload = {
+export async function createProfile(
+  data: Omit<Profile, 'id'>,
+  userIdParam?: string
+): Promise<Profile> {
+  const userId = userIdParam || getStoredUserId();
+
+  if (!userId && !isMockMode()) {
+    throw new ApiError(400, 'User ID is required. Please sign in or create an account first.');
+  }
+
+  const payload: Record<string, any> = {
+    userId: userId || 'mock-user-id',
     fullName: data.fullName?.trim() || '',
     category: data.category,
     annualIncome: Number(data.annualIncome) || 0,
@@ -93,7 +102,6 @@ export async function createProfile(data: Omit<Profile, 'id'>): Promise<Profile>
     }
     return saved;
   } catch (err: any) {
-    // Duplicate validation: backend returns 400 with message
     if (err instanceof ApiError) {
       throw err;
     }
@@ -102,8 +110,9 @@ export async function createProfile(data: Omit<Profile, 'id'>): Promise<Profile>
 }
 
 /**
- * 2. getAllProfiles() -> GET /api/profiles/all
- * Returns array of all profiles for dev-only dropdown on onboarding page.
+ * 4. Get All Profiles (Dev/Testing) -> GET /api/profiles/all
+ * What to send: Nothing.
+ * What it returns: An array of all profile objects. Use this to easily grab real UUIDs for testing.
  */
 export async function getAllProfiles(): Promise<Profile[]> {
   if (isMockMode()) {
@@ -122,8 +131,9 @@ export async function getAllProfiles(): Promise<Profile[]> {
 }
 
 /**
- * 3. getProfile(id) -> GET /api/profiles/{id}
- * Used to load the dashboard and prefill edit form.
+ * 5. Get Specific Profile -> GET /api/profiles/{id}
+ * What to send: The Profile ID in the URL.
+ * What it returns: The specific profile object. Use this to pre-fill the edit profile form.
  */
 export async function getProfile(id: string | number): Promise<Profile> {
   if (isMockMode()) {
@@ -168,8 +178,9 @@ export function computeProfileDiff(
 }
 
 /**
- * 4. updateProfile(id, partial) -> PUT /api/profiles/{id}
- * Send ONLY fields that changed. If nothing changed, skip request.
+ * 6. Update Profile -> PUT /api/profiles/{id}
+ * What to send: The Profile ID in the URL. JSON with only the fields you want to change (e.g., { "annualIncome": 900000 }).
+ * What it returns: The updated profile object.
  */
 export async function updateProfile(
   id: string | number,
