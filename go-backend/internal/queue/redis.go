@@ -17,14 +17,15 @@ const (
 )
 
 type Job struct {
-	JobID string `json:"job_id"`
-	URL   string `json:"url"`
-	Goal  string `json:"goal"`
+	JobID string   `json:"job_id"`
+	URLs  []string `json:"url"`
+	Goal  string   `json:"goal"`
 }
 
 type Status struct {
 	State    string `json:"state"`
 	Attempts int    `json:"attempts"`
+	Progress int    `json:"progress"`
 	Error    string `json:"error,omitempty"`
 }
 

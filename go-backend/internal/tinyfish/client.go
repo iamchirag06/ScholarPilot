@@ -29,11 +29,11 @@ type Result struct {
 
 // RunCrawl calls TinyFish and blocks until the COMPLETE event arrives.
 func RunCrawl(ctx context.Context, targetURL, goal string) (*Result, error) {
-	//HACKATHON MOCK MODE: Uncomment to bypass slow network for testing
-	// time.Sleep(3 * time.Second)
+	// HACKATHON MOCK MODE: Uncomment to bypass slow network for testing
+	// time.Sleep(2 * time.Second) // Simulate network delay
 	// return &Result{
 	// 	Status: "COMPLETED",
-	// 	Data:   json.RawMessage(`{"mocked": true, "name": "Bulbasaur", "price": "£63.00"}`),
+	// 	Data:   json.RawMessage(`[{"source_portal": "Mock Portal", "scheme_name": "Hackathon Hero Scholarship", "provider": "TinyFish", "award_amount": 100000, "deadline": "2026-12-31", "apply_link": "https://example.com", "raw_eligibility_text": "Must be a hacker.", "llm_summary": "A mock scholarship for testing.", "required_documents": ["Laptop", "Coffee"], "confidence_score": 1.0}]`),
 	// }, nil
 	apiKey := os.Getenv("TINYFISH_API_KEY")
 	if apiKey == "" {

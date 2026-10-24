@@ -13,3 +13,5 @@ type Scholarship struct {
 	RequiredDocuments []string `json:"required_documents"`
 	ConfidenceScore   float64  `json:"confidence_score"`
 }
+
+type ScholarshipList []Scholarship

@@ -32,12 +32,12 @@ func (h *CrawlHandler) Health(w http.ResponseWriter, r *http.Request) {
 
 func (h *CrawlHandler) CreateCrawl(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		URL  string `json:"url"`
-		Goal string `json:"goal"`
+		URLs []string `json:"urls"`
+		Goal string   `json:"goal"`
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.URLs) == 0 {
 		http.Error(w, `{"error":"url required"}`, http.StatusBadRequest)
 		return
 	}
@@ -45,7 +45,7 @@ func (h *CrawlHandler) CreateCrawl(w http.ResponseWriter, r *http.Request) {
 	jobID := uuid.NewString()
 	job := queue.Job{
 		JobID: jobID,
-		URL:   body.URL,
+		URLs:  body.URLs,
 		Goal:  body.Goal,
 	}
 
@@ -82,7 +82,13 @@ func (h *CrawlHandler) GetCrawlStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := map[string]any{"job_id": jobID, "status": st.State, "attempts": st.Attempts}
+	resp := map[string]any{
+		"job_id":   jobID,
+		"status":   st.State,
+		"attempts": st.Attempts,
+		"progress": st.Progress,
+	}
+
 	if st.Error != "" {
 		resp["error"] = st.Error
 	}
