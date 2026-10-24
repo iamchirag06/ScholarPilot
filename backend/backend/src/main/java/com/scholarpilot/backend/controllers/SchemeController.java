@@ -23,6 +23,7 @@ public class SchemeController {
 
     @Autowired
     private ProfileRepository profileRepo;
+
     @Autowired
     private RestTemplate restTemplate;
 
@@ -31,71 +32,93 @@ public class SchemeController {
         return schemeRepo.findAll();
     }
 
-    // ⚡ THE HARD-RULE MATCHER ⚡
+    // ⚡ THE HARD-RULE MATCHER + AI RANKER ⚡
     @GetMapping("/matched/{profileId}")
     public List<Scheme> getMatchedSchemes(@PathVariable UUID profileId) {
-        // 1. Get the student's profile
         Profile student = profileRepo.findById(profileId)
                 .orElseThrow(() -> new RuntimeException("Profile not found"));
 
-        // 2. Get all schemes from the database
-        List<Scheme> allSchemes = schemeRepo.findAll();
-
-        // 3. The Filter Logic
-        return allSchemes.stream()
+        List<Scheme> eligibleSchemes = schemeRepo.findAll().stream()
                 .filter(scheme -> {
-                    // Check Category (Either the scheme is for ALL, or it matches the student)
                     boolean categoryMatch = scheme.getTargetCategory() == null ||
                             scheme.getTargetCategory().equalsIgnoreCase("ALL") ||
                             scheme.getTargetCategory().equalsIgnoreCase(student.getCategory());
-
-                    // Check Income (Either no limit, or student income is below limit)
                     boolean incomeMatch = scheme.getMaxIncome() == null ||
                             student.getAnnualIncome() <= scheme.getMaxIncome();
-
-                    // Check State (Either ALL, or matches student state)
                     boolean stateMatch = scheme.getTargetState() == null ||
                             scheme.getTargetState().equalsIgnoreCase("ALL") ||
                             scheme.getTargetState().equalsIgnoreCase(student.getState());
-
                     return categoryMatch && incomeMatch && stateMatch;
                 })
                 .collect(Collectors.toList());
-    }
-    // 🤝 INTEGRATION ENDPOINT FOR GO & PYTHON 🤝
 
-    // 2. Update his controller method to this:
+        if (eligibleSchemes.isEmpty()) return eligibleSchemes;
+
+        // Call Deepak's Python API for Ranking
+        try {
+            String pythonRankUrl = "https://unroasted-crib-plenty.ngrok-free.dev/api/rank";
+
+            RankRequest rankRequest = new RankRequest();
+            rankRequest.setSchemes(eligibleSchemes);
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("ngrok-skip-browser-warning", "true");
+
+            org.springframework.http.HttpEntity<RankRequest> entity = new org.springframework.http.HttpEntity<>(rankRequest, headers);
+
+            org.springframework.http.ResponseEntity<RankResponse> responseEntity =
+                    restTemplate.postForEntity(pythonRankUrl, entity, RankResponse.class);
+
+            RankResponse response = responseEntity.getBody();
+
+            if (response != null && response.getRanked_candidates() != null) {
+                java.util.Map<String, Integer> rankMap = new java.util.HashMap<>();
+                for (RankedCandidate rc : response.getRanked_candidates()) {
+                    rankMap.put(rc.getId(), rc.getRank());
+                }
+
+                eligibleSchemes.sort((s1, s2) -> {
+                    int rank1 = rankMap.getOrDefault(s1.getId().toString(), 999);
+                    int rank2 = rankMap.getOrDefault(s2.getId().toString(), 999);
+                    return Integer.compare(rank1, rank2);
+                });
+            }
+        } catch (Exception e) {
+            System.out.println("⚠️ Python Ranker API failed. Returning unranked schemes. Error: " + e.getMessage());
+        }
+
+        return eligibleSchemes;
+    }
+
+    // 🤝 INTEGRATION ENDPOINT FOR GO & PYTHON 🤝
     @PostMapping("/save-from-go")
     public List<Scheme> saveFromGo(@RequestBody GoPayload payload) {
+        System.out.println("📥 Received payload from Go: " + payload);
 
         List<Scheme> savedSchemes = new ArrayList<>();
+        if (payload == null || payload.getSchemes() == null) {
+            System.out.println("❌ ERROR: Payload or Schemes array is null.");
+            return savedSchemes;
+        }
 
-        // Loop through the array of schemes sent by Bharat
         for (Scheme incomingScheme : payload.getSchemes()) {
-
+            System.out.println("Processing scheme: " + incomingScheme.getSchemeName());
             incomingScheme.setLlmSummary("Generating AI summary...");
 
-            // Note: You might want to remove this first save, and only save once at the end
-            // Scheme savedScheme = schemeRepo.save(incomingScheme);
-
             try {
-                // 1. Use Deepak's Ngrok URL
                 String pythonApiUrl = "https://unroasted-crib-plenty.ngrok-free.dev/api/summarize";
 
-                // 2. Create the request body
                 java.util.Map<String, String> requestBody = new java.util.HashMap<>();
                 requestBody.put("raw_text", incomingScheme.getRawEligibilityText());
 
-                // 3. Create headers to bypass the Ngrok warning page
                 org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
                 headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-                headers.set("ngrok-skip-browser-warning", "true"); // <--- CRITICAL LINE
+                headers.set("ngrok-skip-browser-warning", "true");
 
-                // 4. Wrap body and headers in HttpEntity
                 org.springframework.http.HttpEntity<java.util.Map<String, String>> entity =
                         new org.springframework.http.HttpEntity<>(requestBody, headers);
 
-                // 5. Send the request
                 org.springframework.http.ResponseEntity<java.util.Map> responseEntity =
                         restTemplate.postForEntity(pythonApiUrl, entity, java.util.Map.class);
 
@@ -116,6 +139,28 @@ public class SchemeController {
 
         return savedSchemes;
     }
+
+    // 🤖 MOCK AUTO-FILL ENDPOINT FOR DEMO 🤖
+    @GetMapping("/{schemeId}/auto-fill/{profileId}")
+    public java.util.Map<String, Object> autoFillForm(@PathVariable UUID schemeId, @PathVariable UUID profileId) {
+        Profile student = profileRepo.findById(profileId).orElseThrow();
+
+        java.util.Map<String, Object> formFields = new java.util.HashMap<>();
+        formFields.put("Full Name", student.getFullName());
+        formFields.put("Category", student.getCategory());
+        formFields.put("Annual Income", student.getAnnualIncome());
+        formFields.put("State", student.getState());
+        formFields.put("Course Level", student.getCourseLevel());
+        formFields.put("Gender", student.getGender());
+        formFields.put("Marks", student.getMarksPercentage());
+        formFields.put("Aadhaar (Mock)", "XXXX-XXXX-1234");
+        formFields.put("Status", "Pre-filled successfully ✅");
+
+        return formFields;
+    }
+
+    // --- HELPER CLASSES ---
+
     @lombok.Data
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public static class GoPayload {
@@ -124,5 +169,24 @@ public class SchemeController {
 
         @com.fasterxml.jackson.annotation.JsonProperty("schemes")
         private List<Scheme> schemes;
+    }
+
+    @lombok.Data
+    public static class RankRequest {
+        private List<Scheme> schemes;
+    }
+
+    @lombok.Data
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RankResponse {
+        private List<RankedCandidate> ranked_candidates;
+    }
+
+    @lombok.Data
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RankedCandidate {
+        private String id;
+        private Integer rank;
+        private Double rank_score;
     }
 }
