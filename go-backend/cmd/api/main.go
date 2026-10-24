@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ScholarPilot/internal/router"
 	"ScholarPilot/internal/worker"
 	"context"
 	"errors"
@@ -41,6 +42,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + port,
+		Handler:           router.New(rdb),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      15 * time.Second,
