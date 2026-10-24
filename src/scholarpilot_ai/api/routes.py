@@ -1,9 +1,7 @@
-"""API route handlers for health, scheme indexing, matching, and score retrieval."""
-
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timezone
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -14,6 +12,8 @@ from src.scholarpilot_ai.vector.embeddings import EmbeddingPipeline
 from src.scholarpilot_ai.engine.eligibility import DeterministicEligibilityEngine, EligibilityStatus
 from src.scholarpilot_ai.engine.ranker import RecommendationRanker, ScoredRecommendation
 from src.scholarpilot_ai.engine.explanation import ExplanationService
+from src.scholarpilot_ai.services.summarizer import ScholarshipSummarizer
+from src.scholarpilot_ai.services.ranker import CandidateRanker
 from src.scholarpilot_ai.api.schemas import (
     HealthResponse,
     IndexRequest,
@@ -23,6 +23,12 @@ from src.scholarpilot_ai.api.schemas import (
     RecommendationItem,
     ScoresListResponse,
     ScoreItem,
+    SummarizeRequest,
+    SummarizeResponse,
+    CandidateItem,
+    RankRequest,
+    RankedCandidateItem,
+    RankResponse,
 )
 
 router = APIRouter()
@@ -318,11 +324,7 @@ def get_profile_scores(
     )
 
 
-@router.get(
-    "/api/v1/profiles/{profile_id}/scores/{scheme_id}",
-    response_model=ScoreItem,
-    tags=["Matching"],
-)
+@router.get("/api/v1/profiles/{profile_id}/scores/{scheme_id}", response_model=ScoreItem, tags=["Matching"],)
 def get_single_scheme_score(
     profile_id: str,
     scheme_id: str,
@@ -355,3 +357,150 @@ def get_single_scheme_score(
         created_at=score.created_at.isoformat() if score.created_at else None,
         updated_at=score.updated_at.isoformat() if score.updated_at else None,
     )
+
+
+# =========================================================================
+# Chirag's Spring Boot Integration Endpoints (Sprint 1 AI/ML Core Endpoints)
+# =========================================================================
+
+
+@router.post(
+    "/api/summarize",
+    response_model=SummarizeResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Scholarship Summarization"],
+    summary="Summarize scholarship eligibility from raw or crawled text",
+)
+@router.post(
+    "/api/summarise",
+    response_model=SummarizeResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Scholarship Summarization"],
+    summary="Summarize scholarship eligibility (alias)",
+)
+@router.post(
+    "/api/v1/summarize",
+    response_model=SummarizeResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Scholarship Summarization"],
+    summary="Summarize scholarship eligibility (v1 alias)",
+)
+@router.post(
+    "/api/v1/summarise",
+    response_model=SummarizeResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Scholarship Summarization"],
+    summary="Summarize scholarship eligibility (v1 alias)",
+)
+def summarize_eligibility_endpoint(
+    req: SummarizeRequest,
+    response: Response,
+) -> SummarizeResponse:
+    """Summarize scholarship eligibility requirements from messy or crawled text.
+    
+    - Validates that raw_text is present and non-empty.
+    - Defends against prompt injection in crawled documents.
+    - Sets 'ngrok-skip-browser-warning: true' header for seamless ngrok tunneling.
+    - Extracts verified facts: category, income, courses, marks, deadlines, documents.
+    - Distinguishes missing information from confirmed facts without hallucination.
+    - Employs Gemini / Groq LLM chain with guaranteed deterministic fallback.
+    - Returns structured summary compatible with Chirag's Java Spring Boot DTOs.
+    """
+    response.headers["ngrok-skip-browser-warning"] = "true"
+    if not req.raw_text or not req.raw_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="raw_text cannot be empty or contain only whitespace.",
+        )
+
+    try:
+        result = ScholarshipSummarizer.summarize(req.raw_text)
+        return SummarizeResponse(
+            summary=result.summary,
+            confidence_score=result.confidence_score,
+            warnings=result.warnings,
+            extracted_facts=result.extracted_facts,
+            is_fallback=result.is_fallback,
+            provider=result.provider,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while processing scholarship summarization.",
+        )
+
+
+@router.post(
+    "/api/rank",
+    response_model=Union[List[RankedCandidateItem], RankResponse],
+    status_code=status.HTTP_200_OK,
+    tags=["Scholarship Ranking"],
+    summary="Deterministically rank candidate scholarships that survived Java eligibility filtering",
+)
+@router.post(
+    "/api/v1/rank",
+    response_model=Union[List[RankedCandidateItem], RankResponse],
+    status_code=status.HTTP_200_OK,
+    tags=["Scholarship Ranking"],
+    summary="Deterministically rank candidate scholarships (v1 alias)",
+)
+def rank_candidates_endpoint(
+    payload: Union[List[CandidateItem], RankRequest],
+) -> Any:
+    """Deterministically rank surviving scholarship candidates.
+    
+    Formula:
+      rank_score = (award_amount_score * 0.5) + (eligibility_score * 0.5)
+      
+    - Normalizes award amount via log-scaling up to ₹2,00,000 (0.0 to 1.0).
+    - Uses caller-supplied or structured eligibility score (0.0 to 1.0).
+    - Sorts descending by rank_score with deterministic multi-key tie breaking.
+    - Handles empty candidate list and missing optional fields without crashing.
+    - Preserves all original candidate identifying fields.
+    - Compatible with both raw JSON array and object payloads from Java Spring Boot.
+    """
+    # Check whether caller passed a raw list or a wrapped request object
+    is_list_payload = isinstance(payload, list)
+    if is_list_payload:
+        candidates_raw = [c.to_dict() for c in payload]
+    else:
+        candidates_raw = payload.get_candidates()
+
+    # Empty candidate list handling
+    if not candidates_raw:
+        if is_list_payload:
+            return []
+        return RankResponse(total=0, ranked_candidates=[])
+
+    ranked = CandidateRanker.score_and_rank(candidates_raw)
+
+    items = [
+        RankedCandidateItem(
+            id=r.id,
+            scheme_name=r.scheme_name,
+            provider=r.provider,
+            award_amount=r.award_amount,
+            deadline=r.deadline,
+            apply_link=r.apply_link,
+            raw_eligibility_text=r.raw_eligibility_text,
+            llm_summary=r.llm_summary,
+            required_documents=r.required_documents,
+            confidence_score=r.confidence_score,
+            eligibility_score=r.eligibility_score,
+            rank=r.rank,
+            rank_score=r.rank_score,
+            score_explanation=r.score_explanation.model_dump(),
+            disclaimer=r.disclaimer,
+            **r.extra_fields,
+        )
+        for r in ranked
+    ]
+
+    if is_list_payload:
+        return items
+    return RankResponse(total=len(items), ranked_candidates=items)

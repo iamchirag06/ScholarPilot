@@ -33,7 +33,10 @@ QDRANT_API_KEY=your_key_here
 EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 QDRANT_COLLECTION_NAME=scholarships_v1
 API_HOST=0.0.0.0
-API_PORT=8001
+API_PORT=8000
+# Optional Free-tier LLMs (Gemini / Groq)
+# GEMINI_API_KEY=your_gemini_key
+# GROQ_API_KEY=your_groq_key
 ```
 *(For offline or CI testing, you can omit `QDRANT_ENDPOINT` to automatically use local in-memory Qdrant).*
 
@@ -43,19 +46,33 @@ API_PORT=8001
 
 ### 2.1 Start Development Server
 ```bash
-uvicorn src.scholarpilot_ai.api.app:app --host 0.0.0.0 --port 8001 --reload
+uvicorn src.scholarpilot_ai.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 Interactive Swagger API documentation will be available at:
-`http://localhost:8001/docs`
+`http://localhost:8000/docs`
 
-### 2.2 Ingest & Index Schemes
+### 2.2 Summarize Scholarship Eligibility (Chirag's Spring Boot Backend)
 ```bash
-curl -X POST http://localhost:8001/api/v1/schemes/index -H "Content-Type: application/json" -d "{}"
+curl -X POST http://localhost:8000/api/summarize \
+  -H "Content-Type: application/json" \
+  -d '{"raw_text": "Post-Matric Scholarship for SC/ST students in Bihar with family income under Rs. 2,50,000 per annum. Deadline 2026-11-30."}'
 ```
 
-### 2.3 Match a Student Profile
+### 2.3 Rank Hard-Rule Survivors (Chirag's Spring Boot Backend)
 ```bash
-curl -X POST http://localhost:8001/api/v1/matches \
+curl -X POST http://localhost:8000/api/rank \
+  -H "Content-Type: application/json" \
+  -d '[{"id": "scheme-1", "scheme_name": "Fellowship", "award_amount": 100000, "eligibility_score": 0.9}]'
+```
+
+### 2.4 Ingest & Index Schemes
+```bash
+curl -X POST http://localhost:8000/api/v1/schemes/index -H "Content-Type: application/json" -d "{}"
+```
+
+### 2.5 Match a Student Profile
+```bash
+curl -X POST http://localhost:8000/api/v1/matches \
   -H "Content-Type: application/json" \
   -d '{"profile_id": "prof-arjun-001", "top_k": 10}'
 ```
@@ -67,4 +84,4 @@ Execute the full pytest suite:
 ```bash
 python -m pytest -v
 ```
-All 22 unit, integration, and API tests will execute in isolated in-memory environments.
+All 46 unit, integration, and API tests will execute in isolated in-memory environments with 100% pass rate.

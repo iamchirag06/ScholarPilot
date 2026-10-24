@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Server
     API_HOST: str = "0.0.0.0"
-    API_PORT: int = 8001
+    API_PORT: int = 8000
 
     # Database
     DATABASE_URL: str = "sqlite:///./scholarpilot.db"
@@ -38,9 +38,13 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     EMBEDDING_DIMENSION: int = 384
 
-    # LLM (Optional Gemini Free Tier)
+    # LLM Providers (Gemini & Groq Fallback)
     GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
     LLM_TIMEOUT_SEC: float = 8.0
+    MAX_RAW_TEXT_LENGTH: int = 25000
 
     @property
     def effective_qdrant_endpoint(self) -> Optional[str]:

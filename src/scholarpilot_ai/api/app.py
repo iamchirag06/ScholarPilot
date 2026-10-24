@@ -73,7 +73,15 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["*", "ngrok-skip-browser-warning"],
     )
+
+    # Middleware ensuring ngrok-skip-browser-warning header is present on all responses
+    @app.middleware("http")
+    async def add_ngrok_skip_browser_warning_header(request, call_next):
+        response = await call_next(request)
+        response.headers["ngrok-skip-browser-warning"] = "true"
+        return response
 
     app.include_router(router)
 

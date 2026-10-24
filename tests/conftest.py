@@ -1,11 +1,14 @@
-"""Pytest configuration and test fixtures for ScholarPilot AI/ML Engine."""
-
+import os
 import pytest
 from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from qdrant_client import QdrantClient
 from starlette.testclient import TestClient
+
+# Ensure automated test suite runs offline and isolated from live paid external calls
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["GROQ_API_KEY"] = ""
 
 from src.scholarpilot_ai.db.models import Base, SchemeModel, ProfileModel
 from src.scholarpilot_ai.db.session import get_db
@@ -14,6 +17,11 @@ from src.scholarpilot_ai.data.seed_schemes import SEED_SCHEMES
 from src.scholarpilot_ai.data.seed_profiles import SEED_PROFILES
 from src.scholarpilot_ai.api.app import app
 from src.scholarpilot_ai.api.routes import get_qdrant_service
+from src.scholarpilot_ai.services.summarizer import settings as summarizer_settings
+
+# Isolate default test execution from external live LLM calls
+summarizer_settings.GEMINI_API_KEY = None
+summarizer_settings.GROQ_API_KEY = None
 
 
 @pytest.fixture(scope="session")
