@@ -6,7 +6,9 @@ import com.scholarpilot.backend.repositories.ProfileRepository;
 import com.scholarpilot.backend.repositories.SchemeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -21,6 +23,8 @@ public class SchemeController {
 
     @Autowired
     private ProfileRepository profileRepo;
+    @Autowired
+    private RestTemplate restTemplate;
 
     @GetMapping("/all")
     public List<Scheme> getAllSchemes() {
@@ -59,19 +63,66 @@ public class SchemeController {
                 .collect(Collectors.toList());
     }
     // 🤝 INTEGRATION ENDPOINT FOR GO & PYTHON 🤝
-    // Bharat (Go) will call this with the scraped data
+
+    // 2. Update his controller method to this:
     @PostMapping("/save-from-go")
-    public Scheme saveFromGo(@RequestBody Scheme incomingScheme) {
+    public List<Scheme> saveFromGo(@RequestBody GoPayload payload) {
 
-        // 1. Save the raw scraped data to Neon DB (with a temporary summary)
-        incomingScheme.setLlmSummary("Generating AI summary...");
-        Scheme savedScheme = schemeRepo.save(incomingScheme);
+        List<Scheme> savedSchemes = new ArrayList<>();
 
-        // 2. (Optional but recommended) Call Deepak's Python API here
-        // String aiSummary = restTemplate.postForObject("http://localhost:8000/summarize", savedScheme.getRawEligibilityText(), String.class);
-        // savedScheme.setLlmSummary(aiSummary);
-        // schemeRepo.save(savedScheme);
+        // Loop through the array of schemes sent by Bharat
+        for (Scheme incomingScheme : payload.getSchemes()) {
 
-        return savedScheme;
+            incomingScheme.setLlmSummary("Generating AI summary...");
+
+            // Note: You might want to remove this first save, and only save once at the end
+            // Scheme savedScheme = schemeRepo.save(incomingScheme);
+
+            try {
+                // 1. Use Deepak's Ngrok URL
+                String pythonApiUrl = "https://unroasted-crib-plenty.ngrok-free.dev/api/summarize";
+
+                // 2. Create the request body
+                java.util.Map<String, String> requestBody = new java.util.HashMap<>();
+                requestBody.put("raw_text", incomingScheme.getRawEligibilityText());
+
+                // 3. Create headers to bypass the Ngrok warning page
+                org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                headers.set("ngrok-skip-browser-warning", "true"); // <--- CRITICAL LINE
+
+                // 4. Wrap body and headers in HttpEntity
+                org.springframework.http.HttpEntity<java.util.Map<String, String>> entity =
+                        new org.springframework.http.HttpEntity<>(requestBody, headers);
+
+                // 5. Send the request
+                org.springframework.http.ResponseEntity<java.util.Map> responseEntity =
+                        restTemplate.postForEntity(pythonApiUrl, entity, java.util.Map.class);
+
+                java.util.Map response = responseEntity.getBody();
+
+                if (response != null && response.containsKey("summary")) {
+                    incomingScheme.setLlmSummary((String) response.get("summary"));
+                } else {
+                    incomingScheme.setLlmSummary("AI summary unavailable.");
+                }
+            } catch (Exception e) {
+                System.out.println("⚠️ Python API failed. Error: " + e.getMessage());
+                incomingScheme.setLlmSummary("Error generating summary.");
+            }
+
+            savedSchemes.add(schemeRepo.save(incomingScheme));
+        }
+
+        return savedSchemes;
+    }
+    @lombok.Data
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class GoPayload {
+        @com.fasterxml.jackson.annotation.JsonProperty("job_id")
+        private String job_id;
+
+        @com.fasterxml.jackson.annotation.JsonProperty("schemes")
+        private List<Scheme> schemes;
     }
 }
