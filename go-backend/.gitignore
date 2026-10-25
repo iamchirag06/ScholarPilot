@@ -1,3 +1,5 @@
 .env
 *.exe
 go-orchestrator
+cmd/smoke.go
+cmd/seed/
