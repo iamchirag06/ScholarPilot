@@ -22,14 +22,14 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
 
     # Database
-    DATABASE_URL: str = "postgresql://neondb_owner:npg_W6EjN7vyHhYo@ep-empty-mud-b5kjkcbj-pooler.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
 
     # Qdrant Vector DB
     # Handles standard naming and existing project aliases (QDART_ENDPOINT, QDRAT_API_KEY)
-    QDRANT_ENDPOINT: Optional[str] = None
-    QDART_ENDPOINT: Optional[str] = None
-    QDRANT_API_KEY: Optional[str] = None
-    QDRAT_API_KEY: Optional[str] = None
+    QDRANT_ENDPOINT: Optional[str] = os.getenv("QDRANT_ENDPOINT")
+    QDART_ENDPOINT: Optional[str] = os.getenv("QDART_ENDPOINT")
+    QDRANT_API_KEY: Optional[str] = os.getenv("QDRANT_API_KEY")
+    QDRAT_API_KEY: Optional[str] = os.getenv("QDRAT_API_KEY")
     QDRANT_LOCATION: Optional[str] = None  # e.g., ":memory:" for isolated offline testing
     QDRANT_COLLECTION_NAME: str = "scholarships_v1"
     QDRANT_TIMEOUT_SEC: float = 10.0
