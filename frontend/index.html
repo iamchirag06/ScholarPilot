@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScholarPilot — Intelligent Scholarship Discovery & Autofill</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-hover: #1e293b;
+      --border: #1f2937;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --primary-glow: rgba(59, 130, 246, 0.25);
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.2);
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      color: white;
+      font-weight: 800;
+      font-size: 15px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .persona-select {
+      background: #1f2937;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    main {
+      flex: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      width: 100%;
+    }
+
+    .hero-banner {
+      background: linear-gradient(135deg, rgba(30, 58, 138, 0.3), rgba(17, 24, 39, 0.6));
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .profile-info h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .profile-tags {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .tag.highlight {
+      background: var(--primary-glow);
+      border-color: rgba(59, 130, 246, 0.4);
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 20px;
+    }
+
+    .scheme-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scheme-card:hover {
+      transform: translateY(-2px);
+      border-color: #3b82f6;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 0 15px -3px var(--primary-glow);
+    }
+
+    .card-top {
+      margin-bottom: 16px;
+    }
+
+    .score-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.35;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .card-provider {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    .benefit-row {
+      display: flex;
+      justify-content: space-between;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .benefit-val {
+      font-weight: 700;
+      color: #60a5fa;
+    }
+
+    .docs-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 18px;
+    }
+
+    .doc-pill {
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-apply {
+      width: 100%;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-apply:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    /* Modal Backdrop & Drawer */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      padding: 16px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background: #111827;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-width: 580px;
+      width: 100%;
+      padding: 28px;
+      position: relative;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      animation: modalSlideUp 0.2s ease-out;
+    }
+
+    @keyframes modalSlideUp {
+      from { transform: translateY(16px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .modal-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+
+    .status-pill.ready {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .status-pill.review {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .checklist-box {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 18px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .check-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .check-icon {
+      color: var(--success);
+      font-weight: bold;
+    }
+
+    .ext-notice {
+      background: rgba(59, 130, 246, 0.1);
+      border-left: 3px solid var(--primary);
+      padding: 12px;
+      border-radius: 0 8px 8px 0;
+      font-size: 12px;
+      color: #bfdbfe;
+      margin-bottom: 22px;
+      line-height: 1.5;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn-secondary {
+      flex: 1;
+      background: #1f2937;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .btn-primary-action {
+      flex: 2;
+      background: var(--primary);
+      border: none;
+      color: white;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .loading-spinner {
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      width: 14px;
+      height: 14px;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo-badge">SP</span>
+      <div>
+        <div class="brand-title">ScholarPilot</div>
+        <div class="brand-subtitle">AI/ML Intelligent Scholarship Application Engine</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 12px; color: var(--text-muted);">Active Student:</span>
+      <select id="personaSelect" class="persona-select">
+        <option value="prof-arjun-001">Arjun (B.Tech, Bihar, SC)</option>
+        <option value="prof-riya-002">Riya (Class 12, Haryana, OBC)</option>
+        <option value="prof-priya-003">Priya (B.Tech, UP, Pragati)</option>
+      </select>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero-banner">
+      <div class="profile-info">
+        <h2 id="studentName">Student: Arjun (prof-arjun-001)</h2>
+        <div class="profile-tags" id="profileTags">
+          <span class="tag highlight">SC Category</span>
+          <span class="tag">B.Tech (UG)</span>
+          <span class="tag">Domicile: Bihar</span>
+          <span class="tag">Family Income: ₹1,80,000/yr</span>
+          <span class="tag">Academic Score: 78.0%</span>
+        </div>
+      </div>
+      <div>
+        <span class="tag highlight" style="font-size: 12px; padding: 6px 14px;">
+          ✓ Verified Profile Consent
+        </span>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <div class="section-title">Eligible Scholarships & Application Autofill</div>
+      <div style="font-size: 12px; color: var(--text-muted);">
+        Powered by Deterministic Tri-State Eligibility & Transparent Multi-Factor Ranking
+      </div>
+    </div>
+
+    <div id="cardsGrid" class="cards-grid">
+      <!-- Scholarship cards rendered dynamically -->
+    </div>
+  </main>
+
+  <!-- Fill Application Modal -->
+  <div id="autofillModal" class="modal-overlay">
+    <div class="modal-card">
+      <button id="modalClose" class="modal-close">&times;</button>
+      <div class="modal-title" id="modalSchemeTitle">Preparing Application...</div>
+      <div class="modal-subtitle" id="modalProvider">Official Scholarship Application Discovery</div>
+
+      <div id="modalLoading" style="text-align: center; padding: 32px 0;">
+        <div class="loading-spinner" style="width: 32px; height: 32px; margin: 0 auto 16px auto; border-width: 3px;"></div>
+        <div style="color: var(--text-muted); font-size: 13px;">Verifying student profile & official portal form...</div>
+      </div>
+
+      <div id="modalBody" style="display: none;">
+        <div id="statusPill" class="status-pill ready">READY FOR AUTOFILL</div>
+
+        <div class="checklist-box">
+          <div style="font-size: 12px; font-weight: 700; color: #94a3b8; margin-bottom: 10px; text-transform: uppercase;">
+            Autofill Readiness Verification
+          </div>
+          <div class="check-item">
+            <span class="check-icon">✓</span>
+            <span id="checkProfile">Student profile facts authorized & verified</span>
+          </div>
+          <div class="check-item">
+            <span class="check-icon">✓</span>
+            <span id="checkUrl">Official application URL verified: <strong id="portalUrlText">scholarships.gov.in</strong></span>
+          </div>
+          <div class="check-item">
+            <span class="check-icon">✓</span>
+            <span>Short-lived single-use autofill session generated (TTL: 15 mins)</span>
+          </div>
+        </div>
+
+        <div class="ext-notice">
+          <strong>Extension Integration:</strong> When the portal opens, click the <strong>ScholarPilot</strong> extension icon in your Chrome toolbar and tap <strong>Autofill Supported Fields</strong>.<br>
+          <em>Note: Sensitive identity numbers (Aadhaar, Bank details) require manual student completion.</em>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btnCancelModal" class="btn-secondary">Cancel</button>
+          <button id="btnProceedPortal" class="btn-primary-action">
+            <span>Proceed to Official Website</span>
+            <span>➔</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+
+    const SCHEMES_CACHE = [
+      {
+        id: "scheme-bihar-postmatric-sc-002",
+        title: "Bihar Post-Matric Scholarship for SC/ST Students",
+        provider: "SC & ST Welfare Department, Govt of Bihar",
+        award: "₹35,000 / academic year",
+        score: 83.3,
+        deadline: "2026-11-30",
+        docs: ["Caste Certificate", "Income Certificate", "Bihar Domicile", "Bonafide Certificate"],
+        url: "https://pmsonline.bih.nic.in"
+      },
+      {
+        id: "scheme-nsp-central-001",
+        title: "Central Sector Scheme for College and University Students",
+        provider: "Ministry of Education, Govt of India",
+        award: "₹20,000 / academic year",
+        score: 85.0,
+        deadline: "2026-12-31",
+        docs: ["Income Certificate", "12th Marksheet", "Aadhaar Card", "Admission Proof"],
+        url: "https://scholarships.gov.in/schemes/central-sector"
+      },
+      {
+        id: "scheme-aicte-pragati-girls-003",
+        title: "AICTE Pragati Scholarship for Girl Students",
+        provider: "All India Council for Technical Education (AICTE)",
+        award: "₹50,000 / academic year",
+        score: 79.5,
+        deadline: "2026-12-15",
+        docs: ["Income Certificate", "Degree Admission Letter", "Marksheet"],
+        url: "https://scholarships.gov.in"
+      }
+    ];
+
+    let currentPreparedResponse = null;
+
+    function renderCards() {
+      const grid = document.getElementById("cardsGrid");
+      grid.innerHTML = "";
+
+      SCHEMES_CACHE.forEach(scheme => {
+        const card = document.createElement("div");
+        card.className = "scheme-card";
+        card.innerHTML = `
+          <div class="card-top">
+            <div class="score-badge">★ Match Score ${scheme.score}/100</div>
+            <div class="card-title">${scheme.title}</div>
+            <div class="card-provider">${scheme.provider}</div>
+            <div class="benefit-row">
+              <span style="color: var(--text-muted)">Award Benefit:</span>
+              <span class="benefit-val">${scheme.award}</span>
+            </div>
+            <div class="docs-list">
+              ${scheme.docs.map(d => `<span class="doc-pill">${d}</span>`).join("")}
+            </div>
+          </div>
+          <div>
+            <button class="btn-apply" onclick="openAutofill('${scheme.id}', '${scheme.title}')">
+              <span>⚡</span> Fill Application
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    async function openAutofill(schemeId, schemeTitle) {
+      const modal = document.getElementById("autofillModal");
+      const loading = document.getElementById("modalLoading");
+      const body = document.getElementById("modalBody");
+      const titleEl = document.getElementById("modalSchemeTitle");
+
+      titleEl.textContent = schemeTitle;
+      modal.classList.add("active");
+      loading.style.display = "block";
+      body.style.display = "none";
+
+      const studentId = document.getElementById("personaSelect").value;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/autofill/prepare`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": studentId,
+            "ngrok-skip-browser-warning": "true"
+          },
+          body: JSON.stringify({ schemeId: schemeId, userId: studentId })
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to prepare autofill session.");
+        }
+
+        const data = await res.json();
+        currentPreparedResponse = data;
+
+        // Render modal contents
+        loading.style.display = "none";
+        body.style.display = "block";
+
+        const statusPill = document.getElementById("statusPill");
+        statusPill.textContent = data.status === "READY" ? "READY FOR AUTOFILL" : data.status;
+        statusPill.className = `status-pill ${data.status === "READY" ? "ready" : "review"}`;
+
+        document.getElementById("portalUrlText").textContent = data.applicationUrl || "Verified Official Portal";
+
+        // Store session in localStorage for extension pickup
+        if (data.autofillSession) {
+          localStorage.setItem("scholarpilot_active_session", data.autofillSession.sessionId);
+        }
+      } catch (err) {
+        loading.innerHTML = `<div style="color: #ef4444; font-size: 13px;">Error: ${err.message}</div>`;
+      }
+    }
+
+    document.getElementById("modalClose").addEventListener("click", () => {
+      document.getElementById("autofillModal").classList.remove("active");
+    });
+    document.getElementById("btnCancelModal").addEventListener("click", () => {
+      document.getElementById("autofillModal").classList.remove("active");
+    });
+
+    document.getElementById("btnProceedPortal").addEventListener("click", () => {
+      if (currentPreparedResponse && currentPreparedResponse.applicationUrl) {
+        const targetUrl = new URL(currentPreparedResponse.applicationUrl);
+        if (currentPreparedResponse.autofillSession) {
+          targetUrl.searchParams.set("sp_session", currentPreparedResponse.autofillSession.sessionId);
+        }
+        window.open(targetUrl.toString(), "_blank");
+        document.getElementById("autofillModal").classList.remove("active");
+      }
+    });
+
+    document.getElementById("personaSelect").addEventListener("change", (e) => {
+      const studentId = e.target.value;
+      const studentNameEl = document.getElementById("studentName");
+      const tagsEl = document.getElementById("profileTags");
+
+      if (studentId === "prof-arjun-001") {
+        studentNameEl.textContent = "Student: Arjun (prof-arjun-001)";
+        tagsEl.innerHTML = `
+          <span class="tag highlight">SC Category</span>
+          <span class="tag">B.Tech (UG)</span>
+          <span class="tag">Domicile: Bihar</span>
+          <span class="tag">Family Income: ₹1,80,000/yr</span>
+          <span class="tag">Academic Score: 78.0%</span>
+        `;
+      } else if (studentId === "prof-riya-002") {
+        studentNameEl.textContent = "Student: Riya (prof-riya-002)";
+        tagsEl.innerHTML = `
+          <span class="tag highlight">OBC Category</span>
+          <span class="tag">Class 12</span>
+          <span class="tag">Domicile: Haryana</span>
+          <span class="tag">Family Income: ₹1,60,000/yr</span>
+          <span class="tag">Academic Score: 82.0%</span>
+        `;
+      } else {
+        studentNameEl.textContent = "Student: Priya (prof-priya-003)";
+        tagsEl.innerHTML = `
+          <span class="tag highlight">General Category</span>
+          <span class="tag">B.Tech (UG)</span>
+          <span class="tag">Domicile: Uttar Pradesh</span>
+          <span class="tag">Family Income: ₹3,50,000/yr</span>
+          <span class="tag">Academic Score: 74.0%</span>
+        `;
+      }
+    });
+
+    // Initialize
+    renderCards();
+  </script>
+</body>
+</html>

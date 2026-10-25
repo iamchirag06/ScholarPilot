@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "ScholarPilot - Intelligent Scholarship Autofill",
+  "version": "1.0.0",
+  "description": "Secure, privacy-first scholarship form discovery and autofill assistant for Indian national and state scholarship portals.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://scholarships.gov.in/*",
+    "https://*.scholarships.gov.in/*",
+    "https://pmsonline.bih.nic.in/*",
+    "https://*.pmsonline.bih.nic.in/*",
+    "https://*.aicte-india.org/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ScholarPilot Autofill Assistant"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://scholarships.gov.in/*",
+        "https://*.scholarships.gov.in/*",
+        "https://pmsonline.bih.nic.in/*",
+        "https://*.pmsonline.bih.nic.in/*",
+        "https://*.aicte-india.org/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
