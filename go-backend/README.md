@@ -1,0 +1,457 @@
+# ScholarPilot — Go Scraping & AI Extraction Engine
+
+A high-performance, asynchronous web scraping and AI-driven data extraction microservice built in Go for the **ScholarPilot** ecosystem.
+
+This service crawls fragmented scholarship portals (National Scholarship Portal, state welfare sites, institutional pages), invokes **TinyFish AI** agentic browser automation to extract structured scholarship details from unstructured web pages, and delivers normalized scholarship records directly into the primary ScholarPilot Java backend.
+
+---
+
+## Table of Contents
+
+- [Overview & Architecture](#overview--architecture)
+  - [System Flow Diagram](#system-flow-diagram)
+  - [Why Go + Redis + TinyFish?](#why-go--redis--tinyfish)
+- [Key Features](#key-features)
+- [Project Directory Structure](#project-directory-structure)
+- [API Contracts & Endpoints](#api-contracts--endpoints)
+  - [1. Health Check (`GET /health`)](#1-health-check-get-health)
+  - [2. Enqueue Crawl Task (`POST /api/crawl`)](#2-enqueue-crawl-task-post-apicrawl)
+  - [3. Query Job Status (`GET /api/crawl/status/{jobID}`)](#3-query-job-status-get-apicrawlstatusjobid)
+  - [4. Outbound Webhook Callback (`POST /api/schemes/save-from-go`)](#4-outbound-webhook-callback-post-apischemessave-from-go)
+- [Data Models (DTOs)](#data-models-dtos)
+  - [Scholarship Object](#scholarship-object)
+  - [Job Status Object](#job-status-object)
+- [Agentic Extraction Engine (TinyFish Prompting)](#agentic-extraction-engine-tinyfish-prompting)
+- [Environment Variables](#environment-variables)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation & Local Run](#installation--local-run)
+  - [Running the Mock Data Seeder](#running-the-mock-data-seeder)
+  - [Running the TinyFish Smoke Test](#running-the-tinyfish-smoke-test)
+- [Reliability & Concurrency Design](#reliability--concurrency-design)
+
+---
+
+## Overview & Architecture
+
+Scholarship listings across India are notoriously heterogeneous, unstructured, and distributed across dozens of state and central government portals. Traditional CSS-selector scrapers break frequently when layouts change.
+
+**ScholarPilot Go Backend** solves this by decoupling the scraping workload from the core application:
+
+1. **Producer-Consumer Queue**: Crawl requests are ingested over HTTP and quickly queued into Redis with a unique `job_id`.
+2. **Concurrent Workers**: A background worker pool pops jobs and spawns concurrent goroutines per target URL.
+3. **Agentic Extraction**: Uses the **TinyFish AI Automation API** to navigate dynamic JavaScript web pages, extract the underlying scholarship information, and format it into strict JSON arrays.
+4. **Resilient Retries**: Automatic exponential backoff handling for network hiccups and HTTP 429 rate limits.
+5. **Dual Notification**: Status and extracted datasets are cached in Redis for real-time polling, and asynchronously posted to the Java backend upon completion.
+
+### System Flow Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Client / Admin UI
+    participant API as Go HTTP API (:8082)
+    participant Redis as Redis Queue & Cache
+    participant Worker as Go Background Worker
+    participant TinyFish as TinyFish AI Engine
+    participant Java as Java Backend (:8080/8081)
+
+    Client->>API: POST /api/crawl { urls: [...], goal?: "..." }
+    API->>Redis: LPUSH crawl:jobs & SET crawl:status:{id} (queued)
+    API-->>Client: 202 Accepted { job_id: "uuid", status: "queued" }
+
+    loop Background Consumer Loop
+        Worker->>Redis: BRPOP crawl:jobs (5s timeout)
+    end
+    Redis-->>Worker: Dequeue Job
+
+    par Concurrent URL Crawls (Goroutines)
+        Worker->>Redis: Update status (crawling, progress %)
+        Worker->>TinyFish: POST /v1/automation/run (URL + Goal)
+        TinyFish-->>Worker: JSON scholarship data
+        Note over Worker: Normalizes schema, assigns IDs, handles retries
+    end
+
+    Worker->>Redis: SET crawl:result:{id} & SET status (completed, 100%)
+    Worker->>Java: POST /api/schemes/save-from-go (job_id, schemes)
+    Java-->>Worker: 200 OK
+
+    opt Client Polling
+        Client->>API: GET /api/crawl/status/{jobID}
+        API->>Redis: GET status & results
+        API-->>Client: 200 OK { status: "completed", progress: 100, data: [...] }
+    end
+```
+
+### Why Go + Redis + TinyFish?
+
+- **Go**: Lightweight binary footprint, native goroutines for non-blocking concurrent URL processing, and minimal memory overhead.
+- **Redis**: Persistent atomic queueing (`LPUSH` / `BRPOP`), key-value status caching, and configurable 1-hour TTL on scrapings.
+- **TinyFish AI**: Navigates modern Single-Page Applications (SPAs), handles bot mitigations, and synthesizes clean JSON structures regardless of DOM variance.
+
+---
+
+## Key Features
+
+- **Asynchronous Batch Crawling**: Submit multiple URLs simultaneously; each URL runs concurrently within a synchronized wait group.
+- **Granular Progress Reporting**: Real-time progress updates (`0%` to `100%`) stored in Redis for live client progress bars.
+- **Fault-Tolerant Retry Logic**: Up to 3 retry attempts per URL with quadratic exponential backoff (`attempt * attempt` seconds) and intelligent detection of rate limits.
+- **Graceful Shutdown**: Intercepts `SIGINT` and `SIGTERM` to safely drain in-flight operations, close Redis connections, and terminate HTTP listeners without data corruption.
+- **Dual-Format Ingestion**: Tolerates both single JSON objects and JSON arrays returned by TinyFish, automatically normalizing both to standard scholarship lists.
+- **Direct Java Backend Synchronization**: Automatic webhook notification pushes extracted schemes into the main database as soon as the crawl finishes.
+
+---
+
+## Project Directory Structure
+
+```text
+go-backend/
+├── cmd/
+│   └── api/
+│     └── main.go          # Application entrypoint: loads env, connects Redis, starts worker & HTTP server
+│                # Standalone CLI test script to verify TinyFish API connectivity
+├── internal/
+│   ├── dto/
+│   │   └── scholarship.go   # Canonical Data Transfer Objects (Scholarship, ScholarshipList)
+│   ├── handler/
+│   │   └── crawl.go         # HTTP handlers for health, job submission, and status polling
+│   ├── queue/
+│   │   └── redis.go         # Redis client abstraction: Push, Pop, Status, and Result management
+│   ├── router/
+│   │   └── router.go        # Gorilla Mux routing table and endpoint definitions
+│   ├── tinyfish/
+│   │   └── client.go        # HTTP client integrating with TinyFish automation endpoints
+│   └── worker/
+│       └── worker.go        # Background queue consumer, concurrency controller & webhook dispatcher
+├── .env                     # Local environment configuration (port, keys, URLs)
+├── .gitignore               # Git ignore rules
+├── go.mod                   # Go module definition
+├── go.sum                   # Dependency checksums
+├── mock-data.json           # 20 high-fidelity Indian scholarship records for testing
+└── README.md                # Microservice documentation
+```
+
+---
+
+## API Contracts & Endpoints
+
+Base URL: `http://localhost:8082` (or configured `PORT`)
+
+### 1. Health Check (`GET /health`)
+
+Checks if the service is live and responsive.
+
+- **Method**: `GET`
+- **Path**: `/health`
+- **Response**: `200 OK`
+  ```json
+  {
+    "status": "ok"
+  }
+  ```
+
+---
+
+### 2. Enqueue Crawl Task (`POST /api/crawl`)
+
+Accepts a batch of URLs to crawl and extract scholarship data from.
+
+- **Method**: `POST`
+- **Path**: `/api/crawl`
+- **Headers**: `Content-Type: application/json`
+- **Payload Limits**: Max 1 MB request body.
+
+#### Request Body
+
+```json
+{
+  "urls": ["https://scholarships.gov.in/", "https://socialjusticehry.gov.in/"],
+  "goal": "Optional custom prompt for TinyFish AI. If omitted, default scholarship schema prompt is used."
+}
+```
+
+| Field  | Type       | Required | Description                                                     |
+| ------ | ---------- | -------- | --------------------------------------------------------------- |
+| `urls` | `[]string` | **Yes**  | Non-empty list of target web URLs to scrape.                    |
+| `goal` | `string`   | No       | Overrides the default LLM prompt instructions sent to TinyFish. |
+
+#### Response (`202 Accepted`)
+
+```json
+{
+  "job_id": "c7a6e118-9c12-4c6e-82d2-c4ad3d9fb321",
+  "status": "queued"
+}
+```
+
+#### Error Responses
+
+- `400 Bad Request`: `{"error":"url required"}` (when URL array is missing or empty)
+- `500 Internal Server Error`: `{"error":"enqueue failed"}` (if Redis connection fails)
+
+---
+
+### 3. Query Job Status (`GET /api/crawl/status/{jobID}`)
+
+Poll the status and progress of a previously submitted crawl job.
+
+- **Method**: `GET`
+- **Path**: `/api/crawl/status/{jobID}`
+
+#### Response: Job In Progress (`200 OK`)
+
+```json
+{
+  "job_id": "c7a6e118-9c12-4c6e-82d2-c4ad3d9fb321",
+  "status": "crawling",
+  "attempts": 0,
+  "progress": 50
+}
+```
+
+#### Response: Job Completed (`200 OK`)
+
+```json
+{
+  "job_id": "c7a6e118-9c12-4c6e-82d2-c4ad3d9fb321",
+  "status": "completed",
+  "attempts": 1,
+  "progress": 100,
+  "data": [
+    {
+      "id": "c7a6e118-9c12-4c6e-82d2-c4ad3d9fb321-0-0",
+      "sourcePortal": "https://scholarships.gov.in/",
+      "schemeName": "Post-Matric Scholarship for OBC Students",
+      "provider": "Ministry of Social Justice & Empowerment",
+      "awardAmount": 12000,
+      "deadline": "2026-10-31",
+      "applyLink": "https://scholarships.gov.in/",
+      "rawEligibilityText": "OBC students with parental income under Rs. 2.50 lakh per annum.",
+      "llmSummary": "Financial assistance for OBC students pursuing post-matriculation studies.",
+      "requiredDocuments": [
+        "Aadhaar Card",
+        "Income Certificate",
+        "Caste Certificate"
+      ],
+      "confidenceScore": 0.95
+    }
+  ]
+}
+```
+
+#### Response: Job Failed (`200 OK`)
+
+```json
+{
+  "job_id": "c7a6e118-9c12-4c6e-82d2-c4ad3d9fb321",
+  "status": "failed",
+  "attempts": 3,
+  "progress": 0,
+  "error": "no urls provided"
+}
+```
+
+#### Error Responses
+
+- `400 Bad Request`: `{"error":"job_id required"}`
+- `404 Not Found`: `{"error":"job not found"}`
+
+---
+
+### 4. Outbound Webhook Callback (`POST /api/schemes/save-from-go`)
+
+When a crawling job successfully completes, the worker executes an asynchronous background POST request to the Java backend.
+
+- **Destination URL**: Configured via `JAVA_BACKEND_URL` (defaults to `http://localhost:8080/api/schemes/save-from-go`)
+- **Headers**:
+  - `Content-Type: application/json`
+  - `ngrok-skip-browser-warning: true`
+- **Timeout**: 30 seconds
+
+#### Webhook Payload
+
+```json
+{
+  "job_id": "c7a6e118-9c12-4c6e-82d2-c4ad3d9fb321",
+  "schemes": [
+    {
+      "id": "c7a6e118-9c12-4c6e-82d2-c4ad3d9fb321-0-0",
+      "sourcePortal": "https://scholarships.gov.in/",
+      "schemeName": "Post-Matric Scholarship for OBC Students",
+      "provider": "Ministry of Social Justice & Empowerment",
+      "awardAmount": 12000,
+      "deadline": "2026-10-31",
+      "applyLink": "https://scholarships.gov.in/",
+      "rawEligibilityText": "OBC students with parental income under Rs. 2.50 lakh per annum.",
+      "llmSummary": "Financial assistance for OBC students pursuing post-matriculation studies.",
+      "requiredDocuments": ["Aadhaar Card", "Income Certificate"],
+      "confidenceScore": 0.95
+    }
+  ]
+}
+```
+
+---
+
+## Data Models (DTOs)
+
+### Scholarship Object
+
+Defined in [`internal/dto/scholarship.go`](file:///d:/CodeFiles/ScholarPilot/go-backend/internal/dto/scholarship.go):
+
+| Field               | Go Type    | JSON Key             | Description                                                           |
+| ------------------- | ---------- | -------------------- | --------------------------------------------------------------------- |
+| `ID`                | `string`   | `id`                 | Unique synthetic identifier: `{jobID}-{urlIndex}-{itemIndex}`         |
+| `SourcePortal`      | `string`   | `sourcePortal`       | Name or URL of the originating portal                                 |
+| `SchemeName`        | `string`   | `schemeName`         | Official title of the scholarship program                             |
+| `Provider`          | `string`   | `provider`           | Government department, trust, or corporation offering the scholarship |
+| `AwardAmount`       | `int`      | `awardAmount`        | Total grant or aid in INR (integer only, without currency symbols)    |
+| `Deadline`          | `string`   | `deadline`           | Date string formatted as `YYYY-MM-DD`                                 |
+| `ApplyLink`         | `string`   | `applyLink`          | Direct URL to apply or read full guidelines                           |
+| `RawEligibility`    | `string`   | `rawEligibilityText` | Verbatim eligibility requirements extracted from page                 |
+| `LLMSummary`        | `string`   | `llmSummary`         | Concise 2-sentence eligibility and benefits overview                  |
+| `RequiredDocuments` | `[]string` | `requiredDocuments`  | Array of documents needed for submission                              |
+| `ConfidenceScore`   | `float64`  | `confidenceScore`    | LLM certainty score between `0.0` and `1.0`                           |
+
+### Job Status Object
+
+Defined in [`internal/queue/redis.go`](file:///d:/CodeFiles/ScholarPilot/go-backend/internal/queue/redis.go):
+
+| Field      | Go Type  | JSON Key   | Description                                                           |
+| ---------- | -------- | ---------- | --------------------------------------------------------------------- |
+| `State`    | `string` | `state`    | Current state: `"queued"`, `"crawling"`, `"completed"`, or `"failed"` |
+| `Attempts` | `int`    | `attempts` | Number of retries executed                                            |
+| `Progress` | `int`    | `progress` | Crawling completion percentage (`0` - `100`)                          |
+| `Error`    | `string` | `error`    | Failure reason if an unrecoverable error occurred                     |
+
+---
+
+## Agentic Extraction Engine (TinyFish Prompting)
+
+When a crawl task does not supply a custom `goal`, the worker injects this prompt into the TinyFish automation request:
+
+```text
+TASK: Extract ALL scholarships listed on this page.
+Even if there is only ONE scholarship on the page, you MUST return a JSON array containing that single object.
+
+Do not include any conversational text. Do not use markdown blocks. Return ONLY a valid JSON array matching this exact structure:
+[
+  {
+    "sourcePortal": "string",
+    "schemeName": "string",
+    "provider": "string",
+    "awardAmount": 0,
+    "deadline": "YYYY-MM-DD",
+    "applyLink": "string",
+    "rawEligibilityText": "string",
+    "llmSummary": "string",
+    "requiredDocuments": ["string"],
+    "confidenceScore": 0.0
+  }
+]
+```
+
+### Self-Healing Data Parser
+
+TinyFish occasionally returns an individual JSON object instead of an array when a page features only a single scholarship. The worker dynamically checks if the incoming string starts with `{` or `[`, unmarshaling into a single instance or an array respectively, preventing JSON parsing crashes.
+
+---
+
+## Environment Variables
+
+Configure these settings in `.env` inside the `go-backend` directory:
+
+| Variable           | Default Value                                    | Description                                                     |
+| ------------------ | ------------------------------------------------ | --------------------------------------------------------------- |
+| `PORT`             | `8082`                                           | HTTP port on which the Go API server listens                    |
+| `REDIS_ADDR`       | `localhost:6380`                                 | Host & port (or `redis://` URI) for the Redis instance          |
+| `TINYFISH_API_KEY` | _(Required)_                                     | API Key for TinyFish Automation service                         |
+| `JAVA_BACKEND_URL` | `http://localhost:8080/api/schemes/save-from-go` | Destination webhook endpoint to push completed results          |
+| `MOCK_TINYFISH`    | `false`                                          | When set to `true`, returns stubbed mock data for local testing |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Go**: Version `1.22+` (tested on Go `1.26.x`)
+- **Redis**: Running instance on the port specified by `REDIS_ADDR` (e.g. `6380` or default `6379`)
+- **TinyFish API Key**: Obtainable from [TinyFish.ai](https://tinyfish.ai)
+
+### Installation & Local Run
+
+1. **Clone & Navigate**:
+
+   ```bash
+   cd go-backend
+   ```
+
+2. **Setup Environment**:
+   Ensure `.env` exists with valid configuration:
+
+   ```env
+   PORT=8082
+   REDIS_ADDR=localhost:6380
+   TINYFISH_API_KEY=your_tinyfish_api_key_here
+   JAVA_BACKEND_URL=http://localhost:8080/api/schemes/save-from-go
+   ```
+
+3. **Install Dependencies**:
+
+   ```bash
+   go mod download
+   ```
+
+4. **Start the API & Worker Service**:
+
+   ```bash
+   go run ./cmd/api
+   ```
+
+   _The server will verify Redis connectivity, spawn the background worker, and start listening on `:8082`._
+
+5. **Test the Service**:
+
+   ```bash
+   # Liveness check
+   curl http://localhost:8082/health
+
+   # Enqueue a crawl
+   curl -X POST http://localhost:8082/api/crawl \
+     -H "Content-Type: application/json" \
+     -d '{"urls": ["https://scholarships.gov.in/"]}'
+   ```
+
+---
+
+### Running the Mock Data Seeder
+
+If you need to populate the Java database immediately with 20 real-world Indian scholarship records without consuming TinyFish credits:
+
+```bash
+go run ./cmd/seed/main.go
+```
+
+This reads `mock-data.json` and pushes all 20 records directly to `JAVA_BACKEND_URL`.
+
+---
+
+### Running the TinyFish Smoke Test
+
+To verify that your `TINYFISH_API_KEY` is active and capable of extracting scholarships from live web pages:
+
+```bash
+go run ./cmd/smoke.go
+```
+
+This script tests crawling specific scholarship pages on Buddy4Study and prints the raw status and output JSON directly in the terminal.
+
+---
+
+## Reliability & Concurrency Design
+
+1. **Deadlock-Free State Updates**: URL completion counters and Redis progress metrics are protected by `sync.Mutex` with explicit lock/unlock scopes.
+2. **Context Cancellation Handling**: Every worker thread checks `ctx.Done()` before scheduling requests and during backoff sleeps, ensuring immediate responsiveness to termination signals.
+3. **Dedicated Background Context for Results**: When saving completed results to Redis, a fresh `context.Background()` is utilized to guarantee that completed scrape results are persisted even if an HTTP request context expired mid-flight.
+4. **TTL Expirations**: Job statuses and result payloads in Redis carry a 1-hour Time-To-Live (`time.Hour`), keeping the Redis memory footprint tidy without requiring manual cron cleanup.

@@ -1,0 +1,104 @@
+package tinyfish
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"time"
+)
+
+const baseURL = "https://agent.tinyfish.ai/v1/automation/run"
+
+type Request struct {
+	URL  string `json:"url"`
+	Goal string `json:"goal"`
+}
+
+type Result struct {
+	Status string          `json:"status"`
+	Data   json.RawMessage `json:"data,omitempty"`
+	Error  string          `json:"error,omitempty"`
+}
+
+func RunCrawl(ctx context.Context, targetURL, goal string) (*Result, error) {
+	// MOCK MODE
+	// if os.Getenv("MOCK_TINYFISH") == "true" {
+	// 	log.Println("[mock] simulating TinyFish crawl for:", targetURL)
+	// 	time.Sleep(2 * time.Second)
+
+	// 	fakeData := `[
+	// 		{
+	// 			"sourcePortal": "Mock Portal (${URL})",
+	// 			"schemeName": "Hackathon Hero Scholarship",
+	// 			"provider": "TinyFish",
+	// 			"awardAmount": 100000,
+	// 			"deadline": "2026-12-31",
+	// 			"applyLink": "https://example.com",
+	// 			"rawEligibilityText": "Must be a hacker.",
+	// 			"llmSummary": "A mock scholarship for testing.",
+	// 			"requiredDocuments": ["Laptop", "Coffee"],
+	// 			"confidenceScore": 1.0
+	// 		}
+	// 	]`
+	// 	fakeData = strings.ReplaceAll(fakeData, "${URL}", targetURL)
+
+	// 	return &Result{
+	// 		Status: "COMPLETED",
+	// 		Data:   json.RawMessage(fakeData),
+	// 	}, nil
+	// }
+
+	apiKey := os.Getenv("TINYFISH_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("TINYFISH_API_KEY not set")
+	}
+
+	payload, _ := json.Marshal(Request{URL: targetURL, Goal: goal})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+
+	client := &http.Client{Timeout: 360 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("tinyfish request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("rate limited (429)")
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("tinyfish %d: %s", resp.StatusCode, string(body))
+	}
+
+	var runResponse struct {
+		Status string          `json:"status"`
+		Result json.RawMessage `json:"result"`
+		Error  *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&runResponse); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if runResponse.Status != "COMPLETED" {
+		errMsg := "unknown failure"
+		if runResponse.Error != nil {
+			errMsg = runResponse.Error.Message
+		}
+		return &Result{Status: runResponse.Status, Error: errMsg}, nil
+	}
+
+	return &Result{Status: runResponse.Status, Data: runResponse.Result}, nil
+}
