@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #FBF6EE;
+  --color-blush: #F8E4E0;
+  --color-paper: #FFFDF8;
+  --color-paper-border: #E9E1D3;
+  --color-forest: #1F5A45;
+  --color-forest-deep: #17261F;
+  --color-orange: #E8622C;
+  --color-ink: #1A1A1A;
+  --color-muted: #5E5A52;
+  
+  --color-blob-pink: #F6B7C1;
+  --color-blob-peach: #F9C6A5;
+  --color-blob-butter: #F3DE9A;
+  --color-blob-mint: #A9DCC3;
+  
+  --color-urgency-red: #D64545;
+  --color-urgency-amber: #E0A12B;
+  --color-urgency-green: #2F8F6B;
+
+  --font-serif: "Fraunces", Georgia, serif;
+  --font-hand: "Caveat", cursive;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: #FBF6EE;
+    color: #1A1A1A;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-serif);
+  }
+
+  .font-script {
+    font-family: var(--font-hand);
+  }
+}
+
+/* Paper card styling with subtle warm hand-crafted feel */
+.paper-card {
+  background-color: #FFFDF8;
+  border: 1px solid #E9E1D3;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px -2px rgba(26, 26, 26, 0.05), 0 2px 6px -1px rgba(26, 26, 26, 0.03);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.paper-card-interactive:hover {
+  transform: translateY(-2px) rotate(0.4deg);
+  box-shadow: 0 10px 25px -4px rgba(26, 26, 26, 0.08), 0 4px 10px -2px rgba(26, 26, 26, 0.04);
+}
+
+/* Wobbly torn edge masks for organic editorial breaks */
+.torn-divider-top {
+  clip-path: polygon(
+    0% 0%, 5% 4px, 10% 1px, 15% 5px, 20% 2px, 25% 6px, 30% 1px, 35% 5px,
+    40% 2px, 45% 6px, 50% 1px, 55% 5px, 60% 2px, 65% 6px, 70% 1px, 75% 5px,
+    80% 2px, 85% 6px, 90% 1px, 95% 4px, 100% 0%, 100% 100%, 0% 100%
+  );
+}
+
+.torn-divider-bottom {
+  clip-path: polygon(
+    0% 0%, 100% 0%, 100% 100%, 95% calc(100% - 4px), 90% calc(100% - 1px),
+    85% calc(100% - 6px), 80% calc(100% - 2px), 75% calc(100% - 5px), 70% calc(100% - 1px),
+    65% calc(100% - 6px), 60% calc(100% - 2px), 55% calc(100% - 5px), 50% calc(100% - 1px),
+    45% calc(100% - 6px), 40% calc(100% - 2px), 35% calc(100% - 5px), 30% calc(100% - 1px),
+    25% calc(100% - 6px), 20% calc(100% - 2px), 15% calc(100% - 5px), 10% calc(100% - 1px),
+    5% calc(100% - 4px), 0% 100%
+  );
+}
+
+/* Highlighter effect for auto-fill demo */
+@keyframes highlightSwipe {
+  0% {
+    width: 0%;
+    opacity: 0.8;
+  }
+  100% {
+    width: 100%;
+    opacity: 0.35;
+  }
+}
+
+.animate-highlighter {
+  animation: highlightSwipe 0.4s ease-out forwards;
+}
+
+/* Subtle float for sticky note and doodles */
+@keyframes softFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(var(--tw-rotate, 0deg));
+  }
+  50% {
+    transform: translateY(-4px) rotate(var(--tw-rotate, 0deg));
+  }
+}
+
+.animate-soft-float {
+  animation: softFloat 4s ease-in-out infinite;
+}

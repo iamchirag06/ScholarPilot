@@ -1,0 +1,6 @@
+{
+  "name": "ScholarPilot",
+  "description": "AI-powered scholarship discovery and auto-fill app for Indian students with warm, hand-drawn editorial design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

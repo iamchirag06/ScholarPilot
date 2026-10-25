@@ -1,0 +1,103 @@
+<svg viewBox="0 0 400 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Warm organic backdrop blob -->
+  <path d="M70 60C130 10 280 20 340 70C390 110 395 210 340 260C290 300 130 310 70 270C15 230 15 110 70 60Z" fill="#F8E4E0" />
+  
+  <!-- Desk surface -->
+  <path d="M30 250C90 248 310 248 370 250" stroke="#1A1A1A" stroke-width="4.5" stroke-linecap="round" />
+  <path d="M45 252L40 310" stroke="#1A1A1A" stroke-width="4" stroke-linecap="round" />
+  <path d="M355 252L360 310" stroke="#1A1A1A" stroke-width="4" stroke-linecap="round" />
+
+  <!-- Potted Plant on left -->
+  <path d="M60 250L64 215H86L90 250H60Z" fill="#F3DE9A" stroke="#1A1A1A" stroke-width="3" stroke-linejoin="round" />
+  <!-- Leaves -->
+  <path d="M75 215C60 185 45 195 52 175C60 155 78 185 75 215Z" fill="#A9DCC3" stroke="#1A1A1A" stroke-width="3" />
+  <path d="M75 215C85 180 105 185 100 168C92 150 78 180 75 215Z" fill="#1F5A45" stroke="#1A1A1A" stroke-width="3" />
+  <path d="M75 215C72 175 80 150 75 145C70 150 72 185 75 215Z" fill="#A9DCC3" stroke="#1A1A1A" stroke-width="2.5" />
+
+  <!-- Stack of Books with encouraging titles -->
+  <g transform="translate(95, 185)">
+    <!-- Book 1 (bottom) -->
+    <rect x="0" y="42" width="75" height="18" rx="2" fill="#F6B7C1" stroke="#1A1A1A" stroke-width="3" />
+    <text x="37" y="55" font-family="'Caveat', cursive" font-size="11" font-weight="bold" fill="#1A1A1A" text-anchor="middle">Apply Together</text>
+    
+    <!-- Book 2 (middle) -->
+    <rect x="5" y="22" width="68" height="18" rx="2" fill="#F3DE9A" stroke="#1A1A1A" stroke-width="3" transform="rotate(-1 5 22)" />
+    <text x="39" y="35" font-family="'Caveat', cursive" font-size="11" font-weight="bold" fill="#1A1A1A" text-anchor="middle">Dream Brighter</text>
+    
+    <!-- Book 3 (top) -->
+    <rect x="10" y="4" width="60" height="16" rx="2" fill="#A9DCC3" stroke="#1A1A1A" stroke-width="3" transform="rotate(2 10 4)" />
+    <text x="40" y="16" font-family="'Caveat', cursive" font-size="10" font-weight="bold" fill="#1A1A1A" text-anchor="middle">Study Better</text>
+  </g>
+
+  <!-- Coffee Mug steaming -->
+  <g transform="translate(180, 218)">
+    <rect x="0" y="10" width="22" height="22" rx="3" fill="#FFFDF8" stroke="#1A1A1A" stroke-width="3" />
+    <!-- Mug handle -->
+    <path d="M22 14C27 14 27 24 22 24" stroke="#1A1A1A" stroke-width="3" fill="none" />
+    <!-- Steam lines -->
+    <path d="M6 6C7 3 5 1 6 0" stroke="#E8622C" stroke-width="2" stroke-linecap="round" />
+    <path d="M14 7C15 4 13 2 14 0" stroke="#E8622C" stroke-width="2" stroke-linecap="round" />
+  </g>
+
+  <!-- Student Character (Riya) -->
+  <g transform="translate(200, 70)">
+    <!-- Hair back -->
+    <path d="M40 75C30 50 45 15 75 15C110 15 125 45 120 80C110 120 50 120 40 75Z" fill="#1A1A1A" />
+    <!-- Bun / hair tie -->
+    <circle cx="85" cy="14" r="14" fill="#1A1A1A" />
+    <circle cx="85" cy="14" r="6" fill="#E8622C" />
+    
+    <!-- Neck -->
+    <path d="M72 85V105H86V85" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" />
+    
+    <!-- Face & Ears -->
+    <path d="M60 55C60 40 70 30 85 30C100 30 110 40 110 55C110 75 100 88 85 88C70 88 60 75 60 55Z" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" />
+    <!-- Eyes, smile, spectacles -->
+    <circle cx="75" cy="55" r="7" stroke="#1A1A1A" stroke-width="2" fill="none" />
+    <circle cx="95" cy="55" r="7" stroke="#1A1A1A" stroke-width="2" fill="none" />
+    <path d="M82 55H88" stroke="#1A1A1A" stroke-width="2" />
+    <!-- Smile -->
+    <path d="M80 70C83 73 87 73 90 70" stroke="#1A1A1A" stroke-width="2.5" stroke-linecap="round" />
+    <!-- Cheeks blush -->
+    <circle cx="68" cy="64" r="4" fill="#F6B7C1" />
+    <circle cx="102" cy="64" r="4" fill="#F6B7C1" />
+
+    <!-- Torso / warm sweater -->
+    <path d="M45 110C55 100 100 100 115 110L125 180H35L45 110Z" fill="#1F5A45" stroke="#1A1A1A" stroke-width="3.5" />
+    <!-- Sweater collar -->
+    <path d="M72 105C78 112 82 112 88 105" stroke="#FFFDF8" stroke-width="3" stroke-linecap="round" fill="none" />
+    
+    <!-- Arms typing on laptop -->
+    <path d="M45 130C35 155 45 175 65 178" stroke="#1A1A1A" stroke-width="3.5" stroke-linecap="round" fill="none" />
+    <path d="M115 130C125 155 115 175 95 178" stroke="#1A1A1A" stroke-width="3.5" stroke-linecap="round" fill="none" />
+  </g>
+
+  <!-- Laptop open -->
+  <g transform="translate(230, 205)">
+    <!-- Screen -->
+    <path d="M10 5L60 0L65 38L12 42Z" fill="#FFFDF8" stroke="#1A1A1A" stroke-width="3" />
+    <!-- Logo on back of laptop (little star) -->
+    <path d="M37 18L39 24L45 24L40 28L42 34L37 30L32 34L34 28L29 24L35 24Z" fill="#E8622C" />
+    <!-- Base / Keyboard -->
+    <path d="M4 42L72 38L80 47L8 49Z" fill="#E9E1D3" stroke="#1A1A1A" stroke-width="3" />
+  </g>
+
+  <!-- Sleeping Cat beside laptop -->
+  <g transform="translate(305, 218)">
+    <!-- Cat body -->
+    <ellipse cx="28" cy="22" rx="22" ry="12" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" />
+    <!-- Cat head -->
+    <circle cx="12" cy="18" r="10" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" />
+    <!-- Ears -->
+    <path d="M6 10L10 4L13 10" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="2.5" />
+    <path d="M14 10L18 4L20 11" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="2.5" />
+    <!-- Closed eyes sleeping -->
+    <path d="M8 18C10 20 12 20 14 18" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" />
+    <!-- Tail curled -->
+    <path d="M50 22C54 20 54 12 48 12" stroke="#1A1A1A" stroke-width="3" stroke-linecap="round" />
+    <!-- Floating ZZZ -->
+    <text x="32" y="6" font-family="'Caveat', cursive" font-size="14" font-weight="bold" fill="#E8622C">z</text>
+    <text x="40" y="-1" font-family="'Caveat', cursive" font-size="12" font-weight="bold" fill="#E8622C">z</text>
+    <text x="47" y="-7" font-family="'Caveat', cursive" font-size="10" font-weight="bold" fill="#E8622C">z</text>
+  </g>
+</svg>

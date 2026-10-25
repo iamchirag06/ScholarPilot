@@ -1,0 +1,39 @@
+<svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Soft blob -->
+  <path d="M25 35C45 10 125 15 145 45C160 70 145 105 110 112C70 120 15 110 8 80C2 55 10 45 25 35Z" fill="#F3DE9A" opacity="0.6" />
+  
+  <!-- Sleeping Cat curled up -->
+  <g transform="translate(20, 20)">
+    <!-- Body -->
+    <ellipse cx="65" cy="50" rx="42" ry="26" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" />
+    
+    <!-- Paws tucked -->
+    <ellipse cx="38" cy="65" rx="10" ry="7" fill="#FFFDF8" stroke="#1A1A1A" stroke-width="2.5" />
+    <ellipse cx="54" cy="66" rx="9" ry="6" fill="#FFFDF8" stroke="#1A1A1A" stroke-width="2.5" />
+
+    <!-- Head -->
+    <circle cx="35" cy="40" r="22" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" />
+    <!-- Ears -->
+    <path d="M22 24L26 8L36 21" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" />
+    <path d="M24 21L27 12L33 19" fill="#F6B7C1" />
+    <path d="M38 21L48 8L50 24" fill="#F9C6A5" stroke="#1A1A1A" stroke-width="3" />
+    <path d="M41 19L47 12L48 21" fill="#F6B7C1" />
+
+    <!-- Closed eyes -->
+    <path d="M25 40C29 44 33 44 37 40" stroke="#1A1A1A" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M42 40C46 44 50 44 54 40" stroke="#1A1A1A" stroke-width="2.5" stroke-linecap="round" />
+    <!-- Nose -->
+    <path d="M38 46L41 46L39.5 48Z" fill="#E8622C" />
+    <!-- Whiskers -->
+    <path d="M20 44L10 43M20 47L8 49" stroke="#1A1A1A" stroke-width="1.8" stroke-linecap="round" />
+    <path d="M52 44L62 43M52 47L64 49" stroke="#1A1A1A" stroke-width="1.8" stroke-linecap="round" />
+
+    <!-- Curled Tail -->
+    <path d="M104 55C118 52 118 36 108 34" stroke="#1A1A1A" stroke-width="3.5" stroke-linecap="round" />
+
+    <!-- ZZZ floating gently -->
+    <text x="75" y="18" font-family="'Caveat', cursive" font-size="20" font-weight="bold" fill="#E8622C">z</text>
+    <text x="90" y="8" font-family="'Caveat', cursive" font-size="16" font-weight="bold" fill="#E8622C">z</text>
+    <text x="102" y="0" font-family="'Caveat', cursive" font-size="13" font-weight="bold" fill="#E8622C">z</text>
+  </g>
+</svg>
