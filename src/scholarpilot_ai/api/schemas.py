@@ -1,7 +1,7 @@
 """Pydantic schemas for request and response API contracts."""
 
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices, field_validator
 
 
 class HealthResponse(BaseModel):
@@ -179,3 +179,271 @@ class RankedCandidateItem(BaseModel):
 class RankResponse(BaseModel):
     total: int
     ranked_candidates: List[RankedCandidateItem]
+
+
+# ==========================================
+# Chatbot & Context Schemas
+# ==========================================
+
+
+class ChatRequest(BaseModel):
+    userId: str = Field(
+        ...,
+        validation_alias=AliasChoices("userId", "userid", "user_id", "profileId", "profile_id"),
+        description="User identifier to retrieve student profile and matched schemes from Java backend",
+    )
+    message: str = Field(
+        ...,
+        validation_alias=AliasChoices("message", "query", "question", "prompt"),
+        description="User message or question to the chatbot",
+    )
+
+    model_config = {
+        "populate_by_name": True,
+        "extra": "ignore",
+    }
+
+    @field_validator("userId")
+    @classmethod
+    def validate_user_id(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("userId cannot be empty.")
+        return v.strip()
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("message cannot be empty.")
+        return v.strip()
+
+    def get_user_id(self) -> str:
+        return self.userId
+
+    def get_message(self) -> str:
+        return self.message
+
+    def get_query_text(self) -> str:
+        return self.message
+
+
+# ==========================================
+# Student Profile & Autofill Pipeline Schemas
+# ==========================================
+
+
+class StudentProfileData(BaseModel):
+    id: str
+    userId: Optional[str] = None
+    fullName: str
+    dateOfBirth: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    gender: Optional[str] = "NOT_PROVIDED"
+    state: Optional[str] = None
+    district: Optional[str] = None
+    collegeName: Optional[str] = None
+    universityName: Optional[str] = None
+    educationLevel: Optional[str] = None
+    course: Optional[str] = None
+    branch: Optional[str] = None
+    currentAcademicYear: Optional[str] = None
+    academicPercentage: Optional[float] = None
+    cgpa: Optional[float] = None
+    category: Optional[str] = "GENERAL"
+    isDisability: bool = False
+    annualFamilyIncome: Optional[int] = None
+    verificationStatus: str = "PROFILE_DATA"
+
+    model_config = {"extra": "ignore"}
+
+    def to_engine_dict(self) -> Dict[str, Any]:
+        """Convert to internal dictionary format expected by DeterministicEligibilityEngine."""
+        return {
+            "id": self.id,
+            "user_id": self.userId or self.id,
+            "state": self.state,
+            "education_level": self.educationLevel,
+            "course": self.course,
+            "category": self.category,
+            "annual_family_income_inr": self.annualFamilyIncome,
+            "marks_percent": self.academicPercentage,
+            "disability": self.isDisability,
+            "gender": self.gender,
+            "consent_to_process_profile": True,
+        }
+
+
+class RecommendedSchemeItem(BaseModel):
+    schemeId: str
+    schemeName: str
+    provider: str
+    officialApplicationUrl: Optional[str] = None
+    awardAmount: Optional[int] = None
+    deadline: Optional[str] = None
+    eligibilityStatus: str = "ELIGIBLE"  # ELIGIBLE, NEEDS_REVIEW, NOT_ELIGIBLE
+    recommendationScore: Optional[float] = None
+    requiredDocuments: List[str] = Field(default_factory=list)
+    formMetadata: Optional[Dict[str, Any]] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class UnifiedContextResponse(BaseModel):
+    student: StudentProfileData
+    recommendations: List[RecommendedSchemeItem]
+    totalRecommendations: int
+    retrievalSource: str  # "REMOTE_JAVA_BACKEND", "LOCAL_DATABASE", "BENCHMARK_SEED"
+    authenticatedUserId: str
+
+
+class AutofillFieldValue(BaseModel):
+    value: Any
+    source: str
+    verificationStatus: str = "PROFILE_VALUE"
+
+
+class AutofillPrepareRequest(BaseModel):
+    schemeId: str = Field(..., description="Selected scholarship scheme ID")
+    userId: Optional[str] = Field(None, description="Optional override/target user ID if authorized")
+
+    model_config = {"extra": "ignore"}
+
+
+class AutofillPayloadResponse(BaseModel):
+    schemeId: str
+    schemeName: str
+    applicationUrl: Optional[str] = None
+    fieldValues: Dict[str, AutofillFieldValue]
+    missingFields: List[str] = Field(default_factory=list)
+    manualReviewFields: List[str] = Field(default_factory=list)
+    unsupportedFields: List[str] = Field(default_factory=list)
+    eligibilityStatus: str
+    instructions: str
+
+
+class EligibilityValidationRequest(BaseModel):
+    schemeId: str
+    userId: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class EligibilityValidationResponse(BaseModel):
+    schemeId: str
+    eligibilityStatus: str  # ELIGIBLE, NOT_ELIGIBLE, NEEDS_REVIEW
+    coveragePercent: float
+    passedRules: List[str] = Field(default_factory=list)
+    failedRules: List[str] = Field(default_factory=list)
+    unknownRules: List[str] = Field(default_factory=list)
+    missingStudentFields: List[str] = Field(default_factory=list)
+    details: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class FormFieldItem(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    label: Optional[str] = None
+    type: Optional[str] = "text"
+    placeholder: Optional[str] = None
+    ariaLabel: Optional[str] = None
+    options: Optional[List[str]] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class FormMappingRequest(BaseModel):
+    schemeId: str = Field(..., description="Selected scholarship scheme ID")
+    formFields: List[FormFieldItem] = Field(..., description="Detected DOM form fields from browser extension")
+    portalUrl: Optional[str] = None
+    userId: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class MatchedFieldItem(BaseModel):
+    fieldId: Optional[str] = None
+    fieldName: Optional[str] = None
+    label: Optional[str] = None
+    matchedProfileKey: Optional[str] = None
+    valueToFill: Any = None
+    confidence: float = 1.0
+    requiresManualReview: bool = False
+    reason: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class FormMappingResponse(BaseModel):
+    schemeId: str
+    matchedFields: List[MatchedFieldItem] = Field(default_factory=list)
+    unmatchedFields: List[str] = Field(default_factory=list)
+    missingRequiredFields: List[str] = Field(default_factory=list)
+    totalFieldsDetected: int = 0
+    mappedFieldsCount: int = 0
+
+
+class AutofillSessionInfo(BaseModel):
+    sessionId: str
+    expiresAt: str
+    status: str = "ACTIVE"
+
+
+class AutofillDiscoveryInfo(BaseModel):
+    status: str  # VERIFIED, PORTAL_HOMEPAGE, DISCOVERED, NEEDS_USER_SELECTION, LOGIN_REQUIRED, UNAVAILABLE
+    classification: str
+    requiresUserNavigation: bool = False
+    discoveredCandidates: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class AutofillValidationInfo(BaseModel):
+    missingFields: List[str] = Field(default_factory=list)
+    requiresManualReview: List[str] = Field(default_factory=list)
+    unsupportedFields: List[str] = Field(default_factory=list)
+    passedRules: List[str] = Field(default_factory=list)
+    failedRules: List[str] = Field(default_factory=list)
+
+
+class AutofillPrepareResponse(BaseModel):
+    success: bool
+    schemeId: str
+    schemeTitle: str
+    status: str  # READY, DISCOVERING, NEEDS_USER_SELECTION, LOGIN_REQUIRED, MISSING_REQUIRED_DATA, UNSUPPORTED_PORTAL, DISCOVERY_FAILED
+    applicationUrl: Optional[str] = None
+    autofillSession: Optional[AutofillSessionInfo] = None
+    discovery: AutofillDiscoveryInfo
+    validation: AutofillValidationInfo
+    instructions: str = ""
+
+
+class AutofillSessionPayloadResponse(BaseModel):
+    sessionId: str
+    schemeId: str
+    schemeName: str
+    studentId: str
+    applicationUrl: Optional[str] = None
+    fieldValues: Dict[str, AutofillFieldValue]
+    missingFields: List[str] = Field(default_factory=list)
+    manualReviewFields: List[str] = Field(default_factory=list)
+    unsupportedFields: List[str] = Field(default_factory=list)
+    expiresAt: str
+    instructions: str = ""
+
+
+class FormDiscoveryRequest(BaseModel):
+    schemeId: str
+    portalUrl: Optional[str] = None
+    schemeName: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class FormDiscoveryResponse(BaseModel):
+    schemeId: str
+    classification: str
+    applicationUrl: Optional[str] = None
+    isVerified: bool = False
+    confidence: float = 0.0
+    reason: str = ""
+    candidateLinks: List[Dict[str, Any]] = Field(default_factory=list)
+

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.scholarpilot_ai.config import get_settings
 from src.scholarpilot_ai.db.session import init_db, SessionLocal
-from src.scholarpilot_ai.db.models import SchemeModel, ProfileModel
+from src.scholarpilot_ai.db.models import SchemeModel, ProfileModel, AutofillMappingModel
 from src.scholarpilot_ai.data.seed_schemes import SEED_SCHEMES
 from src.scholarpilot_ai.data.seed_profiles import SEED_PROFILES
 from src.scholarpilot_ai.vector.qdrant_service import QdrantService
@@ -15,7 +15,9 @@ settings = get_settings()
 
 
 def seed_initial_data_if_empty() -> None:
-    """Populate initial schemes and test profiles if tables are empty."""
+    """Populate initial schemes, test profiles, and verified autofill mappings if tables are empty."""
+    from src.scholarpilot_ai.services.autofill import DEFAULT_VERIFIED_MAPPINGS
+
     db = SessionLocal()
     try:
         # Seed schemes if table empty
@@ -28,6 +30,12 @@ def seed_initial_data_if_empty() -> None:
         if db.query(ProfileModel).count() == 0:
             for p in SEED_PROFILES:
                 db.add(ProfileModel(**p))
+            db.commit()
+
+        # Seed default verified portal mappings if empty
+        if db.query(AutofillMappingModel).count() == 0:
+            for m in DEFAULT_VERIFIED_MAPPINGS:
+                db.add(AutofillMappingModel(**m))
             db.commit()
     except Exception:
         db.rollback()

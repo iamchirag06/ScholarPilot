@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScholarPilot Autofill</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      width: 380px;
+      background-color: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      color: white;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background-color: rgba(16, 185, 129, 0.2);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .session-info {
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .scheme-name {
+      font-weight: 600;
+      color: #60a5fa;
+      margin-bottom: 4px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .stat-item {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 8px;
+      border-radius: 6px;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .stat-val {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .btn {
+      width: 100%;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.15s ease;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #334155;
+      margin-top: 6px;
+      box-shadow: none;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #475569;
+    }
+
+    .warning-box {
+      background: rgba(245, 158, 11, 0.1);
+      border-left: 3px solid var(--warning);
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #fde68a;
+      border-radius: 0 4px 4px 0;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+
+    .fields-list {
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: rgba(15, 23, 42, 0.4);
+      margin-top: 8px;
+    }
+
+    .field-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .field-row:last-child {
+      border-bottom: none;
+    }
+
+    .field-key {
+      color: var(--text-muted);
+    }
+
+    .field-val {
+      font-weight: 500;
+      color: #93c5fd;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .disclaimer {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 12px;
+      line-height: 1.4;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .input-group input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      color: white;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .input-group button {
+      background: #334155;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <span class="logo-badge">SP</span>
+      <span class="title">ScholarPilot</span>
+    </div>
+    <div id="statusBadge" class="status-badge">STANDBY</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Active Scholarship Scheme</div>
+    <div id="sessionContent" class="session-info">
+      <div id="schemeName" class="scheme-name">Detecting Portal Form...</div>
+      <div id="sessionMeta" style="color: var(--text-muted); font-size: 11px;">
+        Connecting to ScholarPilot session...
+      </div>
+    </div>
+    <div class="input-group" id="manualSessionBox" style="display: none;">
+      <input type="text" id="manualSessionInput" placeholder="Paste session ID (sess_...)">
+      <button id="btnLoadSession">Sync</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Portal Form Detection</div>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div id="statDetected" class="stat-val">0</div>
+        <div class="stat-label">DOM Fields Found</div>
+      </div>
+      <div class="stat-item">
+        <div id="statMapped" class="stat-val">0</div>
+        <div class="stat-label">Auto-Fillable Facts</div>
+      </div>
+    </div>
+
+    <div id="previewBox" style="display: none;">
+      <div class="fields-list" id="fieldsList"></div>
+    </div>
+  </div>
+
+  <div id="warningBox" class="warning-box">
+    <strong>Mandatory Review:</strong> Government identity numbers (Aadhaar, Bank Account, Ration Card) require manual entry. ScholarPilot will never fabricate personal identity credentials.
+  </div>
+
+  <button id="btnAutofill" class="btn" disabled>
+    <span>⚡</span>
+    <span id="btnText">Autofill Supported Fields</span>
+  </button>
+
+  <button id="btnScanAgain" class="btn btn-secondary">
+    <span>🔄</span> Re-scan Page Form
+  </button>
+
+  <div class="disclaimer">
+    ScholarPilot fills verified facts with student consent. Final application review and submission must be completed manually by the student.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

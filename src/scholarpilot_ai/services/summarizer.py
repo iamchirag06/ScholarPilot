@@ -112,12 +112,20 @@ class ScholarshipSummarizer:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import SystemMessage, HumanMessage
 
+            # Only attempt if it is a valid Google AI Studio key format
+            if not api_key or not api_key.startswith("AIzaSy"):
+                return None
+
+            clean_model = settings.GEMINI_MODEL
+            if "3.8" in clean_model or not clean_model:
+                clean_model = "gemini-1.5-flash"
+
             llm = ChatGoogleGenerativeAI(
-                model=settings.GEMINI_MODEL,
+                model=clean_model,
                 google_api_key=api_key,
                 temperature=0.1,
-                timeout=settings.LLM_TIMEOUT_SEC,
-                max_retries=1,
+                timeout=4.0,
+                max_retries=0,
             )
 
             messages = [
@@ -135,29 +143,37 @@ class ScholarshipSummarizer:
 
     @classmethod
     def _call_groq(cls, text: str, api_key: str) -> Optional[str]:
-        """Invoke Groq LLM API via HTTP POST."""
+        """Invoke Groq LLM API via HTTP POST with automatic model candidate fallback."""
         try:
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             }
-            payload = {
-                "model": settings.GROQ_MODEL,
-                "messages": [
-                    {"role": "system", "content": cls.SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Please summarize the eligibility requirements from this scholarship text:\n\n---\n{text}\n---"},
-                ],
-                "temperature": 0.1,
-                "max_tokens": 1024,
-            }
-            with httpx.Client(timeout=settings.LLM_TIMEOUT_SEC) as client:
-                resp = client.post(url, headers=headers, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    summary_text = data["choices"][0]["message"]["content"].strip()
-                    if summary_text and len(summary_text) > 30:
-                        return summary_text
+            candidates = ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+            if settings.GROQ_MODEL and settings.GROQ_MODEL not in ["llama-3.1-8b-instant"]:
+                candidates.insert(0, settings.GROQ_MODEL)
+
+            for model_name in candidates:
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": cls.SYSTEM_PROMPT},
+                        {"role": "user", "content": f"Please summarize the eligibility requirements from this scholarship text:\n\n---\n{text}\n---"},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 1024,
+                }
+                try:
+                    with httpx.Client(timeout=8.0) as client:
+                        resp = client.post(url, headers=headers, json=payload)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            summary_text = data["choices"][0]["message"]["content"].strip()
+                            if summary_text and len(summary_text) > 30:
+                                return summary_text
+                except Exception:
+                    continue
         except Exception as e:
             logger.warning(f"Groq summarization failed: {e}")
         return None
@@ -171,22 +187,6 @@ class ScholarshipSummarizer:
             raise ValueError("raw_text cannot be empty or contain only whitespace.")
 
         text_to_summarize = quality.normalized_text
-
-        # 2. Try Gemini Provider if configured
-        if settings.GEMINI_API_KEY:
-            try:
-                gemini_out = cls._call_gemini(text_to_summarize, settings.GEMINI_API_KEY)
-                if gemini_out:
-                    return SummarizeResult(
-                        summary=gemini_out,
-                        confidence_score=quality.confidence_score,
-                        warnings=quality.warnings,
-                        extracted_facts=quality.detected_facts,
-                        is_fallback=False,
-                        provider=settings.GEMINI_MODEL,
-                    )
-            except Exception as e:
-                logger.warning(f"Gemini summarization failed, trying next provider or fallback: {e}")
 
         # 3. Try Groq Provider if configured
         if settings.GROQ_API_KEY:
@@ -203,6 +203,22 @@ class ScholarshipSummarizer:
                     )
             except Exception as e:
                 logger.warning(f"Groq summarization failed, falling back: {e}")
+
+        # 2. Try Gemini Provider if configured
+        if settings.GEMINI_API_KEY:
+            try:
+                gemini_out = cls._call_gemini(text_to_summarize, settings.GEMINI_API_KEY)
+                if gemini_out:
+                    return SummarizeResult(
+                        summary=gemini_out,
+                        confidence_score=quality.confidence_score,
+                        warnings=quality.warnings,
+                        extracted_facts=quality.detected_facts,
+                        is_fallback=False,
+                        provider=settings.GEMINI_MODEL,
+                    )
+            except Exception as e:
+                logger.warning(f"Gemini summarization failed, trying next provider or fallback: {e}")
 
         # 4. Deterministic Factual Fallback
         det_summary = cls.generate_deterministic_summary(text_to_summarize, quality)

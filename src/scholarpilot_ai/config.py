@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
 
     # Database
-    DATABASE_URL: str = "sqlite:///./scholarpilot.db"
+    DATABASE_URL: str = "postgresql://neondb_owner:npg_W6EjN7vyHhYo@ep-empty-mud-b5kjkcbj-pooler.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
     # Qdrant Vector DB
     # Handles standard naming and existing project aliases (QDART_ENDPOINT, QDRAT_API_KEY)
@@ -40,11 +40,18 @@ class Settings(BaseSettings):
 
     # LLM Providers (Gemini & Groq Fallback)
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-3-pro-preview"
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL: str = "llama-3.1-8b-instant"
     LLM_TIMEOUT_SEC: float = 8.0
     MAX_RAW_TEXT_LENGTH: int = 25000
+
+    # Java Spring Boot Backend URL (for user profiles and matched schemes context)
+    BACKEND_URL: str = "https://underfeed-caterer-backlands.ngrok-free.dev"
+
+    @property
+    def effective_backend_url(self) -> str:
+        return os.getenv("BACKEND_URL") or self.BACKEND_URL
 
     @property
     def effective_qdrant_endpoint(self) -> Optional[str]:

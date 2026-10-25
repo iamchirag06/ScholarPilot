@@ -10,7 +10,14 @@ from starlette.testclient import TestClient
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["GROQ_API_KEY"] = ""
 
-from src.scholarpilot_ai.db.models import Base, SchemeModel, ProfileModel
+from src.scholarpilot_ai.db.models import (
+    Base,
+    SchemeModel,
+    ProfileModel,
+    AutofillMappingModel,
+    AutofillSessionModel,
+)
+from src.scholarpilot_ai.services.autofill import DEFAULT_VERIFIED_MAPPINGS
 from src.scholarpilot_ai.db.session import get_db
 from src.scholarpilot_ai.vector.qdrant_service import QdrantService
 from src.scholarpilot_ai.data.seed_schemes import SEED_SCHEMES
@@ -45,6 +52,8 @@ def db_session(in_memory_engine) -> Generator[Session, None, None]:
         session.add(SchemeModel(**s))
     for p in SEED_PROFILES:
         session.add(ProfileModel(**p))
+    for m in DEFAULT_VERIFIED_MAPPINGS:
+        session.add(AutofillMappingModel(**m))
     session.commit()
 
     yield session

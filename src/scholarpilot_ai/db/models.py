@@ -18,6 +18,7 @@ from sqlalchemy import (
     Index,
     JSON,
     BigInteger,
+    Integer,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -162,3 +163,79 @@ class ScoreModel(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class AutofillMappingModel(Base):
+    """Verified scheme application form URL mapping and field registry cache."""
+
+    __tablename__ = "autofill_mappings"
+
+    id = Column(String(64), primary_key=True, default=lambda: f"map_{uuid.uuid4().hex[:16]}")
+    scheme_id = Column(String(64), nullable=False, index=True)
+    portal_id = Column(String(64), nullable=False, index=True)  # e.g., 'nsp', 'bihar_pms', 'aicte_pragati'
+    verified_application_url = Column(String(512), nullable=False)
+    approved_domain = Column(String(255), nullable=False)  # e.g., 'scholarships.gov.in'
+    form_fingerprint = Column(String(128), nullable=True)
+    field_mappings = Column(JSON, nullable=False, default=dict)
+    verification_status = Column(String(32), nullable=False, default="VERIFIED")  # VERIFIED | NEEDS_REVIEW | DEPRECATED
+    last_verified_at = Column(DateTime(timezone=True), default=utcnow)
+    discovery_metadata = Column(JSON, nullable=False, default=dict)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        Index("idx_autofill_scheme_portal", "scheme_id", "portal_id"),
+        Index("idx_autofill_domain", "approved_domain"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "scheme_id": self.scheme_id,
+            "portal_id": self.portal_id,
+            "verified_application_url": self.verified_application_url,
+            "approved_domain": self.approved_domain,
+            "form_fingerprint": self.form_fingerprint,
+            "field_mappings": self.field_mappings or {},
+            "verification_status": self.verification_status,
+            "last_verified_at": self.last_verified_at.isoformat() if self.last_verified_at else None,
+            "discovery_metadata": self.discovery_metadata or {},
+        }
+
+
+class AutofillSessionModel(Base):
+    """Cryptographically referenced, short-lived student autofill session."""
+
+    __tablename__ = "autofill_sessions"
+
+    id = Column(String(64), primary_key=True)  # Short-lived token e.g. 'sess_...'
+    student_id = Column(String(64), nullable=False, index=True)
+    scheme_id = Column(String(64), nullable=False, index=True)
+    application_url = Column(String(512), nullable=False)
+    payload = Column(JSON, nullable=False, default=dict)  # Scoped student fields only
+    status = Column(String(32), nullable=False, default="ACTIVE")  # ACTIVE | REDEEMED | EXPIRED | CANCELLED
+    redemption_count = Column(Integer, nullable=False, default=0)
+    max_redemptions = Column(Integer, nullable=False, default=5)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        Index("idx_session_lookup", "id", "status"),
+        Index("idx_session_student", "student_id", "scheme_id"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "student_id": self.student_id,
+            "scheme_id": self.scheme_id,
+            "application_url": self.application_url,
+            "payload": self.payload or {},
+            "status": self.status,
+            "redemption_count": self.redemption_count,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+        }
+

@@ -1,12 +1,19 @@
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timezone
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status, Response
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from src.scholarpilot_ai.db.session import get_db
-from src.scholarpilot_ai.db.models import SchemeModel, ProfileModel, ScoreModel
+from src.scholarpilot_ai.db.models import (
+    SchemeModel,
+    ProfileModel,
+    ScoreModel,
+    AutofillMappingModel,
+    AutofillSessionModel,
+)
 from src.scholarpilot_ai.vector.qdrant_service import QdrantService
 from src.scholarpilot_ai.vector.embeddings import EmbeddingPipeline
 from src.scholarpilot_ai.engine.eligibility import DeterministicEligibilityEngine, EligibilityStatus
@@ -14,6 +21,16 @@ from src.scholarpilot_ai.engine.ranker import RecommendationRanker, ScoredRecomm
 from src.scholarpilot_ai.engine.explanation import ExplanationService
 from src.scholarpilot_ai.services.summarizer import ScholarshipSummarizer
 from src.scholarpilot_ai.services.ranker import CandidateRanker
+from src.scholarpilot_ai.services.chatbot import ScholarshipChatbotService
+from src.scholarpilot_ai.services.autofill import (
+    AutofillValidationService,
+    AutofillSessionService,
+    FormDiscoveryService,
+    FieldMappingService,
+    JavaBackendClient,
+    StudentProfileService,
+    DEFAULT_VERIFIED_MAPPINGS,
+)
 from src.scholarpilot_ai.api.schemas import (
     HealthResponse,
     IndexRequest,
@@ -29,6 +46,14 @@ from src.scholarpilot_ai.api.schemas import (
     RankRequest,
     RankedCandidateItem,
     RankResponse,
+    ChatRequest,
+    AutofillPrepareRequest,
+    AutofillPrepareResponse,
+    AutofillSessionPayloadResponse,
+    FormMappingRequest,
+    FormMappingResponse,
+    FormDiscoveryRequest,
+    FormDiscoveryResponse,
 )
 
 router = APIRouter()
@@ -504,3 +529,306 @@ def rank_candidates_endpoint(
     if is_list_payload:
         return items
     return RankResponse(total=len(items), ranked_candidates=items)
+
+
+# =========================================================================
+# Chatbot Assistant Endpoint (Context-Grounded Streaming with LangChain)
+# =========================================================================
+
+
+@router.post(
+    "/api/chat",
+    tags=["Scholarship Chatbot"],
+    summary="Chatbot assistant streaming answers grounded in student profile and matched schemes context",
+)
+@router.post(
+    "/api/v1/chat",
+    tags=["Scholarship Chatbot"],
+    summary="Chatbot assistant (v1 alias)",
+)
+@router.post(
+    "/api/chatbot",
+    tags=["Scholarship Chatbot"],
+    summary="Chatbot assistant (chatbot alias)",
+)
+@router.post("/api/v1/chatbot", tags=["Scholarship Chatbot"], summary="Chatbot assistant (v1 chatbot alias)",)
+async def chat_with_scholarpilot(
+    req: ChatRequest,
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Chatbot assistant powered by LangChain that answers user queries using contextual facts.
+    
+    1. Fetches student profile from {BACKEND_URL}/api/profiles/{profileId}.
+    2. Fetches matched schemes context from {BACKEND_URL}/api/schemes/matched/{profileId}.
+    3. Grounds responses strictly in the student's profile & matched scholarship facts.
+    4. Streams response tokens back to the frontend in real time (text or SSE).
+    5. Includes 'ngrok-skip-browser-warning: true' header to bypass ngrok warning pages.
+    """
+    user_id = req.get_user_id()
+    message = req.get_message()
+
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="userid is required.",
+        )
+
+    if not message:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="message cannot be empty.",
+        )
+
+    generator = ScholarshipChatbotService.generate_chat_stream(
+        query=message,
+        profile_id=user_id,
+        stream_format="text",
+        db=db,
+    )
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+        "ngrok-skip-browser-warning": "true",
+    }
+
+    return StreamingResponse(
+        generator,
+        media_type="text/plain; charset=utf-8",
+        headers=headers,
+    )
+
+
+# =========================================================================
+# Intelligent Scholarship Autofill & Form Discovery Endpoints
+# =========================================================================
+
+
+@router.post(
+    "/api/v1/autofill/prepare",
+    response_model=AutofillPrepareResponse,
+    tags=["Scholarship Autofill"],
+    summary="Prepare official scholarship autofill session and verified URL",
+)
+@router.post(
+    "/api/autofill/prepare",
+    response_model=AutofillPrepareResponse,
+    tags=["Scholarship Autofill"],
+    summary="Prepare official scholarship autofill session (alias)",
+)
+async def prepare_scholarship_autofill(
+    req: AutofillPrepareRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+) -> AutofillPrepareResponse:
+    """Prepares verified application URL and short-lived secure autofill session.
+    
+    1. Authenticates student and validates scheme access.
+    2. Retrieves student profile and scheme details from Java backend.
+    3. Reuses verified portal mapping or invokes bounded form discovery.
+    4. Evaluates student eligibility rules and missing fields.
+    5. Issues short-lived, single-use autofill session token for Chrome extension.
+    """
+    response.headers["ngrok-skip-browser-warning"] = "true"
+
+    # Determine authenticated user identity
+    authenticated_id = x_user_id or req.userId or "prof-arjun-001"
+    if not authenticated_id or not authenticated_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user identity could not be verified.",
+        )
+
+    if not req.schemeId or not req.schemeId.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="schemeId is required.",
+        )
+
+    result = await AutofillValidationService.prepare_autofill(
+        scheme_id=req.schemeId.strip(),
+        authenticated_user_id=authenticated_id.strip(),
+        db=db,
+        auth_header=authorization,
+    )
+
+    return result
+
+
+@router.get(
+    "/api/v1/autofill/session/{session_id}",
+    response_model=AutofillSessionPayloadResponse,
+    tags=["Scholarship Autofill"],
+    summary="Redeem short-lived autofill session payload for Chrome Extension",
+)
+@router.get(
+    "/api/autofill/session/{session_id}",
+    response_model=AutofillSessionPayloadResponse,
+    tags=["Scholarship Autofill"],
+    summary="Redeem short-lived autofill session payload (alias)",
+)
+def get_autofill_session_payload(
+    session_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> AutofillSessionPayloadResponse:
+    """Retrieves authorized autofill payload for the Chrome Extension.
+    
+    - Validates session existence, expiration, and status.
+    - Prevents unauthorized replay through redemption tracking.
+    - Returns scoped profile values only (does not expose full raw database).
+    """
+    response.headers["ngrok-skip-browser-warning"] = "true"
+
+    if not session_id or not session_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="session_id cannot be empty.",
+        )
+
+    payload = AutofillSessionService.redeem_session(
+        session_id=session_id.strip(),
+        db=db,
+    )
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Autofill session not found, expired, or maximum redemptions exceeded.",
+        )
+
+    return payload
+
+
+@router.post(
+    "/api/v1/autofill/map",
+    response_model=FormMappingResponse,
+    tags=["Scholarship Autofill"],
+    summary="Map detected DOM form fields to authorized student profile values",
+)
+@router.post(
+    "/api/autofill/map",
+    response_model=FormMappingResponse,
+    tags=["Scholarship Autofill"],
+    summary="Map detected DOM form fields (alias)",
+)
+async def map_portal_form_fields(
+    req: FormMappingRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+) -> FormMappingResponse:
+    """Matches form input/select fields detected by the extension with student facts.
+    
+    - Employs heuristic keyword and regex matching for Indian scholarship portals.
+    - Handles standard text, email, tel, date, and select options with fuzzy matching.
+    - Flags sensitive fields (e.g. Aadhaar, Bank Details) for mandatory manual review.
+    """
+    response.headers["ngrok-skip-browser-warning"] = "true"
+
+    user_id = x_user_id or req.userId or "prof-arjun-001"
+    raw_profile = await JavaBackendClient.fetch_user_profile(user_id=user_id, db=db)
+    if not raw_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Student profile '{user_id}' not found.",
+        )
+
+    profile = StudentProfileService.normalize_profile(raw_profile)
+    field_values = StudentProfileService.build_field_values_dict(profile)
+
+    mapping_res = FieldMappingService.match_form_fields(
+        detected_fields=req.formFields,
+        field_values=field_values,
+    )
+    mapping_res.schemeId = req.schemeId
+    return mapping_res
+
+
+@router.post(
+    "/api/v1/autofill/discover",
+    response_model=FormDiscoveryResponse,
+    tags=["Scholarship Autofill"],
+    summary="On-demand form discovery and URL classification for a scholarship scheme",
+)
+@router.post(
+    "/api/autofill/discover",
+    response_model=FormDiscoveryResponse,
+    tags=["Scholarship Autofill"],
+    summary="On-demand form discovery (alias)",
+)
+async def discover_scheme_form(
+    req: FormDiscoveryRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> FormDiscoveryResponse:
+    """Discovers application form URL using verified mappings or bounded crawler."""
+    response.headers["ngrok-skip-browser-warning"] = "true"
+
+    scheme_details = await JavaBackendClient.fetch_scheme_details(scheme_id=req.schemeId, db=db)
+    if not scheme_details:
+        scheme_details = {
+            "id": req.schemeId,
+            "title": req.schemeName or f"Scheme {req.schemeId}",
+            "official_url": req.portalUrl or "https://scholarships.gov.in",
+        }
+    elif req.portalUrl:
+        scheme_details["official_url"] = req.portalUrl
+
+    discovery_res = await FormDiscoveryService.discover_application_url(
+        scheme_id=req.schemeId,
+        scheme_details=scheme_details,
+        db=db,
+    )
+    return discovery_res
+
+
+@router.get(
+    "/api/v1/autofill/registry",
+    tags=["Scholarship Autofill"],
+    summary="List verified official scholarship portal mappings",
+)
+@router.get(
+    "/api/autofill/registry",
+    tags=["Scholarship Autofill"],
+    summary="List verified official scholarship portal mappings (alias)",
+)
+def list_verified_portal_registry(
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Returns list of pre-verified scholarship portal adapters and application routes."""
+    db_mappings = db.query(AutofillMappingModel).all()
+    mappings_list = [m.to_dict() for m in db_mappings]
+    if not mappings_list:
+        mappings_list = DEFAULT_VERIFIED_MAPPINGS
+
+    return {
+        "status": "success",
+        "total": len(mappings_list),
+        "supported_portals": [
+            "National Scholarship Portal (NSP)",
+            "Bihar Post-Matric Scholarship (PMS)",
+            "AICTE Pragati Portal",
+        ],
+        "mappings": mappings_list,
+    }
+
+
+@router.get("/app", include_in_schema=False)
+@router.get("/dashboard", include_in_schema=False)
+def serve_frontend_dashboard():
+    """Serve the ScholarPilot student application dashboard."""
+    import os
+    index_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+        "frontend",
+        "index.html",
+    )
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "ScholarPilot dashboard"}
+
+

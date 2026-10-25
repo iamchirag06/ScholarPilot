@@ -260,3 +260,211 @@ Accepts either a **JSON Array** `[...]` or an **Object Wrapper** `{"candidates":
   }
 ]
 ```
+
+---
+
+## 7. Contextual Scholarship Chatbot Assistant (Streaming)
+
+### `POST /api/chat` (Aliases: `POST /api/v1/chat`, `POST /api/chatbot`, `POST /api/v1/chatbot`)
+Streams answers to user queries grounded in real-time context fetched from:
+1. Student Profile: `{BACKEND_URL}/api/profiles/{userid}`
+2. Matched Schemes: `{BACKEND_URL}/api/schemes/matched/{userid}`
+
+Includes automatic multi-model fallback (Groq / Gemini) and local database fallback if the remote backend is offline, and returns `ngrok-skip-browser-warning: true` in response headers.
+
+#### Request Body (Frontend sends `userId` and `message` only)
+```json
+{
+  "userId": "prof-arjun-001",
+  "message": "Which scholarship offers the highest financial award and what documents do I need to prepare?"
+}
+```
+*(Also cleanly accepts `userid` in lowercase, and aliases `user_id` / `profileId` / `profile_id`).*
+
+#### Response `200 OK` (Streamed Content)
+```text
+Hello Arjun! Based on your profile and your 2 matched scholarships:
+
+1. **Top Financial Award**: The **Bihar Post-Matric Scholarship for SC/ST Students** offers the highest grant of **₹35,000 per academic year**.
+
+2. **Required Documents**:
+   • Caste Certificate (SC/ST verification)
+   • Income Certificate (verifying annual income under ₹3,00,000)
+   • Residential / Domicile Certificate (Bihar)
+   • College Bonafide Certificate & Fee Receipt
+
+The application closing date is **2026-11-30**. Let me know if you would like step-by-step application guidance!
+```
+*(Response Headers include: `Content-Type: text/plain; charset=utf-8`, `Cache-Control: no-cache`, `ngrok-skip-browser-warning: true`).*
+
+---
+
+## 8. Intelligent Scholarship Form Discovery & Autofill Workflow
+
+### `POST /api/v1/autofill/prepare` (Alias: `POST /api/autofill/prepare`)
+Initiates scholarship autofill session, checks student eligibility, reuses verified portal mappings or performs bounded form discovery, and issues a cryptographically secure, short-lived session reference for the Chrome Extension.
+
+#### Request Headers
+* `X-User-Id`: Authenticated student ID (e.g. `prof-arjun-001`)
+* `Authorization`: Optional Bearer token from Java backend
+
+#### Request Body
+```json
+{
+  "schemeId": "scheme-bihar-postmatric-sc-002",
+  "userId": "prof-arjun-001"
+}
+```
+
+#### Response `200 OK`
+```json
+{
+  "success": true,
+  "schemeId": "scheme-bihar-postmatric-sc-002",
+  "schemeTitle": "Bihar Post-Matric Scholarship for SC/ST Students",
+  "status": "READY",
+  "applicationUrl": "https://pmsonline.bih.nic.in/pmsedu/(S(pms))/StudentRegistration.aspx",
+  "autofillSession": {
+    "sessionId": "sess_8c5f6e80b87c47d7920ab48596f9e218",
+    "expiresAt": "2026-10-24T18:50:00Z",
+    "status": "ACTIVE"
+  },
+  "discovery": {
+    "status": "DIRECT_APPLICATION_URL",
+    "classification": "DIRECT_APPLICATION_URL",
+    "requiresUserNavigation": false,
+    "discoveredCandidates": []
+  },
+  "validation": {
+    "missingFields": [],
+    "requiresManualReview": [
+      "aadhaar_number",
+      "bank_account_number",
+      "ifsc_code",
+      "income_certificate_number",
+      "caste_certificate_number"
+    ],
+    "unsupportedFields": ["captcha", "aadhaar_otp", "biometric"],
+    "passedRules": [
+      "rule_annual_family_income",
+      "rule_eligible_states",
+      "rule_education_levels",
+      "rule_courses",
+      "rule_category",
+      "rule_minimum_marks"
+    ],
+    "failedRules": []
+  },
+  "instructions": "ScholarPilot Extension is ready to autofill verified fields on the official portal."
+}
+```
+
+---
+
+### `GET /api/v1/autofill/session/{session_id}` (Alias: `GET /api/autofill/session/{session_id}`)
+Redeems authorized autofill session payload for the Chrome Extension. Enforces single-use / replay limits and TTL expiration.
+
+#### Response `200 OK`
+```json
+{
+  "sessionId": "sess_8c5f6e80b87c47d7920ab48596f9e218",
+  "schemeId": "scheme-bihar-postmatric-sc-002",
+  "schemeName": "Bihar Post-Matric Scholarship for SC/ST Students",
+  "studentId": "prof-arjun-001",
+  "applicationUrl": "https://pmsonline.bih.nic.in/pmsedu/(S(pms))/StudentRegistration.aspx",
+  "fieldValues": {
+    "name": {
+      "value": "Arjun Kumar",
+      "source": "STUDENT_PROFILE",
+      "verificationStatus": "PROFILE_VALUE"
+    },
+    "state": {
+      "value": "BR",
+      "source": "STUDENT_PROFILE",
+      "verificationStatus": "PROFILE_VALUE"
+    },
+    "category": {
+      "value": "SC",
+      "source": "STUDENT_PROFILE",
+      "verificationStatus": "PROFILE_VALUE"
+    },
+    "course": {
+      "value": "BTECH",
+      "source": "STUDENT_PROFILE",
+      "verificationStatus": "PROFILE_VALUE"
+    }
+  },
+  "missingFields": [],
+  "manualReviewFields": ["aadhaar_number", "bank_account_number"],
+  "unsupportedFields": ["captcha", "otp"],
+  "expiresAt": "2026-10-24T18:50:00Z",
+  "instructions": "Review pre-filled fields carefully. Enter any missing official document numbers manually before submission."
+}
+```
+
+---
+
+### `POST /api/v1/autofill/map` (Alias: `POST /api/autofill/map`)
+Analyzes raw DOM fields detected by the Chrome Extension and matches them with authorized profile facts.
+
+#### Request Body
+```json
+{
+  "schemeId": "scheme-nsp-central-001",
+  "userId": "prof-arjun-001",
+  "formFields": [
+    {"id": "applicant_name", "name": "applicant_name", "label": "Full Name", "type": "text"},
+    {"id": "state", "name": "state", "label": "Domicile State", "type": "text"},
+    {"id": "aadhaar_no", "name": "aadhaar_no", "label": "Aadhaar Number", "type": "text"}
+  ]
+}
+```
+
+#### Response `200 OK`
+```json
+{
+  "schemeId": "scheme-nsp-central-001",
+  "matchedFields": [
+    {
+      "fieldId": "applicant_name",
+      "fieldName": "applicant_name",
+      "label": "Full Name",
+      "matchedProfileKey": "name",
+      "valueToFill": "Arjun Kumar",
+      "confidence": 0.95,
+      "requiresManualReview": false,
+      "reason": "Matched to profile fact 'name'."
+    },
+    {
+      "fieldId": "state",
+      "fieldName": "state",
+      "label": "Domicile State",
+      "matchedProfileKey": "state",
+      "valueToFill": "BR",
+      "confidence": 0.95,
+      "requiresManualReview": false,
+      "reason": "Matched to profile fact 'state'."
+    },
+    {
+      "fieldId": "aadhaar_no",
+      "fieldName": "aadhaar_no",
+      "label": "Aadhaar Number",
+      "matchedProfileKey": null,
+      "valueToFill": null,
+      "confidence": 0.0,
+      "requiresManualReview": true,
+      "reason": "Government identity or banking field. Must be entered manually."
+    }
+  ],
+  "unmatchedFields": [],
+  "missingRequiredFields": [],
+  "totalFieldsDetected": 3,
+  "mappedFieldsCount": 3
+}
+```
+
+---
+
+### `GET /api/v1/autofill/registry`
+Lists supported official scholarship portals, domain allowlists, and pre-verified application routes.
+
