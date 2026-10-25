@@ -40,6 +40,6 @@ pip install -r requirements.txt
 python -m pytest -v
 
 # 3. Start API server
-uvicorn src.scholarpilot_ai.api.app:app --host 0.0.0.0 --port 8001 --reload
+uvicorn src.scholarpilot_ai.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 API Documentation: `http://localhost:8001/docs`
