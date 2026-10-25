@@ -9,4 +9,5 @@ public interface ProfileRepository extends JpaRepository<Profile, UUID> {
 
     // Spring Boot will automatically write the SQL query for this!
     Optional<Profile> findByFullNameAndState(String fullName, String state);
+
 }

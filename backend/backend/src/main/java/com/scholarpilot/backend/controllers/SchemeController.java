@@ -33,10 +33,12 @@ public class SchemeController {
     }
 
     // ⚡ THE HARD-RULE MATCHER + AI RANKER ⚡
-    @GetMapping("/matched/{profileId}")
-    public List<Scheme> getMatchedSchemes(@PathVariable UUID profileId) {
-        Profile student = profileRepo.findById(profileId)
-                .orElseThrow(() -> new RuntimeException("Profile not found"));
+    @GetMapping("/matched/{userId}")
+    public List<Scheme> getMatchedSchemes(@PathVariable UUID userId) {
+        Profile student = profileRepo.findAll().stream()
+                .filter(p -> p.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Profile not found for this user"));
 
         List<Scheme> eligibleSchemes = schemeRepo.findAll().stream()
                 .filter(scheme -> {
@@ -188,5 +190,19 @@ public class SchemeController {
         private String id;
         private Integer rank;
         private Double rank_score;
+    }
+    // DTO for starting a crawl
+    @lombok.Data
+    public static class StartCrawlRequest {
+        private List<String> urls; // e.g., ["NSP", "Haryana"]
+    }
+
+    // DTO for Go's response
+    @lombok.Data
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class JobResponse {
+        private String job_id;
+        private String status;
+        private Integer progress;
     }
 }

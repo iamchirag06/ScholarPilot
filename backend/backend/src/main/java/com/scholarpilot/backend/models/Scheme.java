@@ -3,6 +3,7 @@ package com.scholarpilot.backend.models;
 import com.fasterxml.jackson.annotation.JsonIgnore; // <-- ADD THIS IMPORT
 import jakarta.persistence.*;
 import lombok.Data;
+
 import java.time.LocalDate;
 import java.util.UUID;
 import java.util.List;

@@ -44,6 +44,7 @@ public class DataSeeder implements CommandLineRunner {
             schemeRepo.save(s2);
 
             System.out.println("✅ Mock Schemes seeded to Neon DB!");
+
         }
     }
 }

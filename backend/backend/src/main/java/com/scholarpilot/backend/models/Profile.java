@@ -3,6 +3,10 @@ package com.scholarpilot.backend.models;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import java.util.Map;
+import java.util.HashMap;
 
 @Entity
 @Table(name = "profiles")
@@ -20,4 +24,12 @@ public class Profile {
     private String gender;
     private Boolean isDisabled;
     private Double marksPercentage;
+
+    // Inside Profile.java, add this:
+    @Column(unique = true, nullable = false)
+    private UUID userId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, String> documents = new HashMap<>();
 }
