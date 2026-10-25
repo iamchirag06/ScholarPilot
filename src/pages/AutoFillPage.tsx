@@ -45,6 +45,13 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
   const [isCompleted, setIsCompleted] = useState(false);
   const [autoFilledCount, setAutoFilledCount] = useState(0);
 
+  // Ensure the page always starts at the top
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+  }, [scheme?.id]);
+
   // Initialize and load pre-filled fields from backend auto-fill endpoint
   useEffect(() => {
     let isCancelled = false;
@@ -271,33 +278,54 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
       </div>
 
       {/* Target Scheme Selector bar */}
-      <div className="bg-[#FFFDF8] rounded-xl p-3 sm:p-4 border border-[#E9E1D3] mb-8 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-2">
-          <Building className="w-5 h-5 text-[#1F5A45]" />
-          <span className="text-xs font-bold text-[#5E5A52] uppercase tracking-wider">
-            Target Portal Form:
-          </span>
-          <span className="text-sm font-bold text-[#1A1A1A] font-serif">
-            {scheme.scheme_name}
-          </span>
-        </div>
+      <div className="paper-card p-3.5 sm:p-4 border border-[#E9E1D3] mb-8 bg-[#FFFDF8] shadow-xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+          {/* Target Form Info */}
+          <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-lg bg-[#EDF8F3] border border-[#2F8F6B]/30 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 text-[#1F5A45]">
+              <Building className="w-4 h-4 shrink-0" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#5E5A52] whitespace-nowrap">
+                  Target Portal Form:
+                </span>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-[#F8E4E0] text-[#E8622C] border border-[#E8622C]/20 whitespace-nowrap">
+                  {scheme.source_portal}
+                </span>
+              </div>
+              <h3
+                className="text-sm sm:text-base font-bold text-[#1A1A1A] font-serif leading-snug break-words"
+                title={scheme.scheme_name}
+              >
+                {scheme.scheme_name}
+              </h3>
+            </div>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-[#5E5A52] font-semibold">Switch Scheme:</label>
-          <select
-            value={scheme?.id || ''}
-            onChange={(e) => {
-              const found = (availableSchemes || []).find((s) => s.id === e.target.value);
-              if (found) onSelectScheme(found);
-            }}
-            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#1F5A45]"
-          >
-            {(availableSchemes || []).map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.scheme_name} ({s.source_portal})
-              </option>
-            ))}
-          </select>
+          {/* Switch Scheme Dropdown */}
+          <div className="flex items-center gap-2 shrink-0 pt-2.5 lg:pt-0 border-t lg:border-t-0 border-[#E9E1D3]/60 w-full sm:w-auto justify-between sm:justify-start">
+            <label htmlFor="scheme-switcher" className="text-xs text-[#5E5A52] font-semibold whitespace-nowrap shrink-0">
+              Switch Scheme:
+            </label>
+            <div className="relative flex-1 sm:flex-initial">
+              <select
+                id="scheme-switcher"
+                value={scheme?.id || ''}
+                onChange={(e) => {
+                  const found = (availableSchemes || []).find((s) => s.id === e.target.value);
+                  if (found) onSelectScheme(found);
+                }}
+                className="w-full sm:w-72 md:w-80 lg:w-72 xl:w-84 text-xs font-semibold pl-2.5 pr-7 py-1.5 rounded-lg bg-[#FBF6EE] border border-[#E9E1D3] hover:border-[#1F5A45] text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#1F5A45] transition-all cursor-pointer truncate shadow-xs"
+              >
+                {(availableSchemes || []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.scheme_name} ({s.source_portal})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -314,19 +342,19 @@ export const AutoFillPage: React.FC<AutoFillPageProps> = ({
         <div className="paper-card p-6 sm:p-10 border-2 border-[#E9E1D3] bg-[#FFFDF8] shadow-lg relative overflow-hidden">
           {/* Official Form Header Stamp */}
           <div className="pb-6 mb-8 border-b-2 border-dashed border-[#E9E1D3] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded-xs bg-[#1F5A45] text-white text-[10px] font-bold tracking-widest uppercase">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="px-2 py-0.5 rounded-xs bg-[#1F5A45] text-white text-[10px] font-bold tracking-widest uppercase whitespace-nowrap">
                   OFFICIAL PORTAL REPLICA
                 </span>
-                <span className="text-xs text-[#5E5A52] font-mono">
+                <span className="text-xs text-[#5E5A52] font-mono whitespace-nowrap">
                   FORM ID: {scheme.id.toUpperCase()}
                 </span>
               </div>
-              <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#1A1A1A]">
+              <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#1A1A1A] break-words">
                 {scheme.source_portal} · {scheme.scheme_name}
               </h2>
-              <p className="text-xs text-[#5E5A52]">
+              <p className="text-xs text-[#5E5A52] break-words mt-0.5">
                 Issued by {scheme.provider} · Maximum Grant: {formatINR(scheme.award_amount)}
               </p>
             </div>

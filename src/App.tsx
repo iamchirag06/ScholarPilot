@@ -148,6 +148,7 @@ export default function App() {
     (url: string, tab: NavTab, targetProfileId?: string | number | null) => {
       if (typeof window !== 'undefined') {
         window.history.pushState({}, '', url);
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       }
       if (targetProfileId !== undefined) {
         setProfileId(targetProfileId);
@@ -163,6 +164,13 @@ export default function App() {
     []
   );
 
+  // Automatically scroll to top whenever the active tab changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+  }, [activeTab]);
+
   // Listen to popstate (browser back/forward button)
   useEffect(() => {
     const handlePopState = () => {
@@ -172,6 +180,9 @@ export default function App() {
         localStorage.setItem('scholarpilot_profile_id', String(id));
       }
       setActiveTab(tab);
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
