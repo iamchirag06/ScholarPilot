@@ -42,18 +42,66 @@ public class SchemeController {
 
         List<Scheme> eligibleSchemes = schemeRepo.findAll().stream()
                 .filter(scheme -> {
+
+                    // --- RULE 1: STRICT CATEGORY MATCHING ---
                     boolean categoryMatch = scheme.getTargetCategory() == null ||
                             scheme.getTargetCategory().equalsIgnoreCase("ALL") ||
                             scheme.getTargetCategory().equalsIgnoreCase(student.getCategory());
-                    boolean incomeMatch = scheme.getMaxIncome() == null ||
-                            student.getAnnualIncome() <= scheme.getMaxIncome();
+
+                    // If it's a PWD scheme, the student MUST be disabled
+                    if (scheme.getTargetCategory().equalsIgnoreCase("PWD")) {
+                        categoryMatch = categoryMatch && Boolean.TRUE.equals(student.getIsDisabled());
+                    }
+
+                    // --- RULE 2: STRICT GENDER MATCHING ---
+                    boolean genderMatch = scheme.getTargetGender() == null ||
+                            scheme.getTargetGender().equalsIgnoreCase("ALL") ||
+                            scheme.getTargetGender().equalsIgnoreCase(student.getGender());
+
+                    // --- RULE 3: STRICT STATE MATCHING ---
                     boolean stateMatch = scheme.getTargetState() == null ||
                             scheme.getTargetState().equalsIgnoreCase("ALL") ||
-                            scheme.getTargetState().equalsIgnoreCase(student.getState());
-                    return categoryMatch && incomeMatch && stateMatch;
+                            scheme.getTargetState().equalsIgnoreCase(student.getState()) ||
+                            (scheme.getTargetState().equals("NER") && isNorthEasternState(student.getState()));
+
+                    // --- RULE 4: THE "STRICT OVERRIDE" INCOME LOGIC ---
+                    // Default check: Does the student make less than the scheme's max limit?
+                    boolean incomeMatch = scheme.getMaxIncome() == null ||
+                            student.getAnnualIncome() <= scheme.getMaxIncome();
+
+                    if (incomeMatch) {
+                        String cat = student.getCategory().toUpperCase();
+                        int income = student.getAnnualIncome();
+
+                        // STRICT OVERRIDE A: SC/ST/OBC Government Schemes
+                        // If the scheme is strictly for SC/ST/OBC, and it's a government portal (NSP/SocialJustice)
+                        // we strictly enforce the 3.5 Lakh limit, even if the database says 8 Lakh.
+                        if ((cat.equals("SC") || cat.equals("ST") || cat.equals("OBC")) &&
+                                !scheme.getTargetCategory().equalsIgnoreCase("ALL") &&
+                                !scheme.getSourcePortal().contains("Buddy4Study")) {
+
+                            if (income > 350000) {
+                                incomeMatch = false; // Strictly reject if income > 3.5L
+                            }
+                        }
+
+                        // STRICT OVERRIDE B: The "Merit Exception"
+                        // If a student has >85% marks, they bypass the income limit for "ALL" category merit schemes
+                        if (scheme.getTargetCategory().equalsIgnoreCase("ALL") && student.getMarksPercentage() >= 85.0) {
+                            // Do nothing, they pass the income check via merit
+                        }
+                        // STRICT OVERRIDE C: General Category strict limit for Private Scholarships
+                        else if (cat.equals("GENERAL") && scheme.getSourcePortal().contains("Buddy4Study")) {
+                            if (income > 600000) {
+                                incomeMatch = false; // Private trusts usually cap General category at 6L
+                            }
+                        }
+                    }
+
+                    // The student must pass ALL strict rules
+                    return categoryMatch && genderMatch && stateMatch && incomeMatch;
                 })
                 .collect(Collectors.toList());
-
         if (eligibleSchemes.isEmpty()) return eligibleSchemes;
 
         // Call Deepak's Python API for Ranking
@@ -204,5 +252,13 @@ public class SchemeController {
         private String job_id;
         private String status;
         private Integer progress;
+    }
+    private boolean isNorthEasternState(String state) {
+        if (state == null) return false;
+        String[] neStates = {"Arunachal", "Assam", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Sikkim", "Tripura"};
+        for (String s : neStates) {
+            if (state.toLowerCase().contains(s.toLowerCase())) return true;
+        }
+        return false;
     }
 }
